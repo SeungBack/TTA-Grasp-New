@@ -1,0 +1,60 @@
+# GraspNet Testing Configuration
+
+# wandb settings
+wandb:
+  project_name: "TTA-Grasp"
+  log_artifact: true
+  log_model: false
+  entity: "shback"
+
+# Dataset settings
+dataset:
+  name: "graspnet1b"
+  root: "/home/seung/Workspaces/Datasets/GraspNet-1Billion"
+  camera: "realsense"  # Camera split [realsense/kinect]
+  split: "test_seen_mixed"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+  # split: "test_similar_mini"
+  num_point: 20000  # Point Number
+  num_view: 300  # View Number
+
+# Model settings
+graspnet:
+  ckpt_path: "ckpts/checkpoint-rs.tar"
+  collision_thresh: 0.01  # Collision Threshold in collision detection 
+  voxel_size: 0.01  # Voxel Size to process point clouds before collision detection
+
+# Test-time adaptation settings
+tta:
+  batch_size: 1
+  method: "tta-grasp"  # Test Time Adaptation methods [none/ema/cotta/testadagrasp/tent/bn-1/alpha-bn]
+  ema_ratio: 0.99  # EMA ratio
+  rst_ratio: 0.1  # Restore ratio
+  aug_types: "none,hflip,vflip"  # Augmentation types for teacher model
+  lr: 1e-4 # Learning rate for TTA
+  optimizer: "adamw"
+  geval_net:
+    model: "dgcnn"
+    ckpt_path: "ckpts/gevalnet-dgcnn.tar"
+    max_grasp_num: 256
+    batch_size: 128
+    min_points: 512
+    grasp_q_thresh: 0.3 # Grasp score threshold
+    geval_score_lamda: 0.0
+    nms_on: false
+    weighted_loss: false
+  contrastive_loss: 
+    thresh: 0.3
+    temperature: 0.2
+    weight: 0.1
+    head_dim: 256
+  analytical_sampling: 
+    use: false
+    num_grasp_samples: 1000
+    config_file_path: '/home/seung/Workspaces/grasp/TestAdaGrasp/ext/pygpg/gripper_params_g1b.cfg'
+  # !TODO: contrastive loss
+
+# Other settings
+seed: 7  # Random seed
+mode: "infereval" # Mode [infereval / infer / eval]
+dump_dir: "logs/tta-grasp-seen-mixed-mini"
+num_workers: 4  # Number of workers used in evaluation

@@ -1,0 +1,21 @@
+base_cfg: "configs/base.yaml"
+
+tta_dataset:
+  name: "graspnet1b"
+  camera: "realsense"  # Camera split [realsense/kinect]
+  split: "test_similar_mixed_mini"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+
+eval_dataset:
+  name: "graspnet1b"
+  camera: "realsense"  # Camera split [realsense/kinect]
+  split: "test_similar_mixed_mini"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+
+# Model settings
+model:
+  ckpt_path: "ckpts/checkpoint-rs.tar"
+
+tta:
+  batch_size: 1
+  window_length: 1
+  method: "bn-adapt"  # Test Time Adaptation methods [none/ema/cotta/testadagrasp/tent/bn-1/alpha-bn]
+

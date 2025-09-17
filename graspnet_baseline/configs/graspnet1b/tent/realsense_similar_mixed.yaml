@@ -1,0 +1,25 @@
+base_cfg: "configs/base.yaml"
+
+tta_dataset:
+  name: "graspnet1b"
+  camera: "realsense"  # Camera split [realsense/kinect]
+  split: "test_similar_mixed"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+
+eval_dataset:
+  name: "graspnet1b"
+  camera: "realsense"  # Camera split [realsense/kinect]
+  split: "test_similar_mixed"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+
+# Model settings
+graspnet:
+  ckpt_path: "ckpts/checkpoint-rs.tar"
+  collision_thresh: 0.01  # Collision Threshold in collision detection 
+  voxel_size: 0.01  # Voxel Size to process point clouds before collision detection
+
+tta:
+  batch_size: 1
+  window_length: 8
+  method: "tent"  # Test Time Adaptation methods [none/ema/cotta/testadagrasp/tent/bn-1/alpha-bn]
+  lr: 1e-4 # Learning rate for TTA
+  optimizer: "adamw"
+  target: 'objectness,grasp_angle,grasp_depth'

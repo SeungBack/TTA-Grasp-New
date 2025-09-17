@@ -1,0 +1,39 @@
+# GraspNet Testing Configuration
+
+# wandb settings
+wandb:
+  project_name: "TTA-Grasp"
+  log_artifact: true
+  log_model: false
+  entity: "shback"
+
+# Dataset settings
+dataset:
+  root: "/home/seung/Workspaces/Datasets/GraspNet-1Billion"
+  camera: "realsense"  # Camera split [realsense/kinect]
+  split: "test_similar_mixed_mini"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+  num_point: 20000  # Point Number
+  num_view: 300  # View Number
+
+# Model settings
+graspnet:
+  ckpt_path: "ckpts/checkpoint-rs.tar"
+  collision_thresh: 0.01  # Collision Threshold in collision detection 
+  voxel_size: 0.01  # Voxel Size to process point clouds before collision detection
+
+# Test-time adaptation settings
+tta:
+  batch_size: 1 
+  method: "cotta"  # Test Time Adaptation methods [none/ema/cotta/testadagrasp/tent/bn-1/alpha-bn]
+  ema_ratio: 0.99  # EMA ratio
+  rst_ratio: 0.1  # Restore ratio
+  aug_types: "none,hflip,vflip"  # Augmentation types for teacher model
+  lr: 1e-4 # Learning rate for TTA
+  grasp_score_thresh: 0.4 # Grasp score threshold
+  # !TODO: adjust lr when batch size == 1
+
+# Other settings
+seed: 7  # Random seed
+mode: "infereval" # Mode [infereval / infer / eval]
+dump_dir: "logs/cotta"
+num_workers: 8  # Number of workers used in evaluation

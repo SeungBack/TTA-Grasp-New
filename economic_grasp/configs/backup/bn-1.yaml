@@ -1,0 +1,42 @@
+# GraspNet Testing Configuration
+
+# Dataset settings
+dataset:
+  root: "/home/seung/Workspaces/Datasets/GraspNet-1Billion"
+  camera: "realsense"  # Camera split [realsense/kinect]
+  split: "test_similar_mixed_mini"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+  num_point: 20000  # Point Number
+  num_view: 300  # View Number
+
+# Model settings
+graspnet:
+  ckpt_path: "ckpts/checkpoint-rs.tar"
+  collision_thresh: 0.01  # Collision Threshold in collision detection 
+  voxel_size: 0.01  # Voxel Size to process point clouds before collision detection
+# Grasp scoring network settings (testadagrasp specific)
+gevalnet:
+  gsnet: "dgcnn"  # Grasp scoring network [pointnet2/dgcnn/pointmlp]
+  gsnet_ckpt_path: ""  # Grasp scoring network checkpoint path
+  gsnet_batch_size: 64  # Grasp scoring network batch size
+  filt_th: 0.4  # Grasp scoring network threshold
+
+
+
+
+# Test-time adaptation settings
+tta:
+  batch_size: 16  
+  method: "bn-1"  # Test Time Adaptation methods [none/ema/cotta/testadagrasp/tent/bn-1/alpha-bn]
+  # ema_ratio: 0.999  # EMA ratio
+  # stochastic_restore: false  # Stochastic restore
+  # gaussian_noise: false  # Add gaussian noise to student model
+  # aug_types: "none,hflip,vflip,rotate"  # Augmentation types for teacher model
+  # contrastive_loss: 0.01  # Contrastive loss weight
+  # neg_ratio: 0.75  # Negative pairs ratio
+
+
+# Other settings
+seed: 7  # Random seed
+mode: "infereval" 
+dump_dir: "logs/bn-1"
+num_workers: 8  # Number of workers used in evaluation

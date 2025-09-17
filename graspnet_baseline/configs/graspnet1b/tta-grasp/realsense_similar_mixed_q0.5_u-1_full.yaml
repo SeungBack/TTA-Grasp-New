@@ -1,0 +1,37 @@
+base_cfg: "configs/base.yaml"
+
+tta_dataset:
+  name: "graspnet1b"
+  camera: "realsense"  # Camera split [realsense/kinect]
+  split: "test_similar_mixed"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+
+eval_dataset:
+  name: "graspnet1b"
+  camera: "realsense"  # Camera split [realsense/kinect]
+  split: "test_similar_mixed"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+
+# Model settings
+model:
+  ckpt_path: "ckpts/checkpoint-rs.tar"
+
+tta:
+  batch_size: 1
+  method: "tta-grasp"  # Test Time Adaptation methods [none/ema/cotta/testadagrasp/tent/bn-1/alpha-bn]
+  ema_ratio: 0.995  # EMA ratio
+  rst_ratio: 0.1  # Restore ratio
+  aug_types: "none,hflip"  # Augmentation types for teacher ensemble
+  use_student_aug: false
+  lr: 1e-4 # Learning rate for TTA
+  optimizer: "adamw"
+  geval_net:
+    model: "dgcnn"
+    ckpt_path: "../grasp_qnet/ckpts/graspqnet-g1b-acr-full.tar"
+    max_grasp_num: 512
+    batch_size: 128
+    min_points: 512
+    grasp_q_thresh: 0.5 # Grasp score threshold
+    uncertainty_thresh: -1.0 # Uncertainty threshold
+
+
+  kd:
+    weight: 0.0

@@ -1,0 +1,27 @@
+# Base Configuration
+
+# wandb settings
+wandb:
+  project_name: "TTA-Grasp-EconomicGrasp"
+  log_artifact: true
+  log_model: false
+  entity: "shback"
+
+model:
+  name: "economic_grasp"  # Model name [economicgrasp]
+  seed_feat_dim: 512
+  num_point: 20000  # Point Number
+  voxel_size: 0.005  
+  collision_thresh: 0.00  # Collision Threshold in collision detection
+  num_view: 300  # View Number
+
+# Dataset settings
+graspnet1b:
+  root: "/home/seung/Datasets/GraspNet-1Billion"
+graspclutter6d:
+  root: "/home/seung/Datasets/GraspClutter6D"
+
+
+seed: 7  # Random seed
+mode: "infereval" # Mode [infereval / infer / eval]
+num_workers: 4  # Number of workers used in evaluation

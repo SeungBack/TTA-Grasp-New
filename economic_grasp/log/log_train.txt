@@ -1,0 +1,6 @@
+Namespace(dataset_root='/home/seung/Workspaces/Datasets/GraspNet-1Billion', camera='realsense', log_dir='log', model='graspness', num_point=20000, grasp_max_width=0.1, graspness_threshold=0.1, num_view=300, num_angle=12, num_depth=4, m_point=1024, objectness_loss_weight=1, graspness_loss_weight=10, view_loss_weight=100, angle_loss_weight=1, depth_loss_weight=1, score_loss_weight=1, width_loss_weight=10, checkpoint_path='ckpts/economicgrasp_realsense.tar', resume=False, max_epoch=20, batch_size=1, learning_rate=0.001, weight_decay=0, voxel_size=0.005, save_dir='logs', collision_thresh=0, dataset='g1b', split='test', mode='infer')
+**** EPOCH 0   ****
+Current learning rate: 0.001000
+Namespace(dataset_root='/home/seung/Workspaces/Datasets/GraspNet-1Billion', camera='realsense', log_dir='log', model='graspness', num_point=20000, grasp_max_width=0.1, graspness_threshold=0.1, num_view=300, num_angle=12, num_depth=4, m_point=1024, objectness_loss_weight=1, graspness_loss_weight=10, view_loss_weight=100, angle_loss_weight=1, depth_loss_weight=1, score_loss_weight=1, width_loss_weight=10, checkpoint_path='ckpts/economicgrasp_realsense.tar', resume=False, max_epoch=20, batch_size=1, learning_rate=0.001, weight_decay=0, voxel_size=0.005, save_dir='logs', collision_thresh=0, dataset='g1b', split='test', mode='infer')
+**** EPOCH 0   ****
+Current learning rate: 0.001000

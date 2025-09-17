@@ -1,0 +1,26 @@
+Namespace(g1b_root='/home/seung/Workspaces/Datasets/GraspNet-1Billion/grasp_qnet', acronym_root='/home/seung/Workspaces/Datasets/ACRONYM/grasp_qnet', net='dgcnn', ckpt_path=None, log_dir='debug', max_epoch=200, batch_size=128, num_workers=2, learning_rate=1e-05, min_learning_rate=1e-07, weight_decay=0.0001, resume=False, pretrained=False, evals_per_epoch=4, save_best_only=True, warmup_iters=5000, warmup_factor=0.1, step_size_iters=10000, step_gamma=0.7, gradient_clip=1.0, use_normal=False, real_ratio=0.5)
+Using per-iteration warmup for 5000 iterations starting at 0.000001 and increasing to 0.000010
+LR will decay by 0.7 every 10000 iterations
+Total batches per epoch: 7405
+Will evaluate model every 1851 batches
+Number of parameters: 1891329
+**** EPOCH 000 ****
+Current learning rate: 0.000001
+2025-06-04 17:08:39.320584
+Using per-iteration warmup for 5000 iterations starting at 0.000001 and increasing to 0.000010
+LR will decay by 0.7 every 10000 iterations
+Total batches per epoch: 7405
+Will evaluate model every 1851 batches
+Number of parameters: 1891329
+**** EPOCH 000 ****
+Current learning rate: 0.000001
+2025-06-04 17:09:07.669241
+Using per-iteration warmup for 5000 iterations starting at 0.000001 and increasing to 0.000010
+LR will decay by 0.7 every 10000 iterations
+Total batches per epoch: 7405
+Will evaluate model every 1851 batches
+Number of parameters: 1891329
+**** EPOCH 000 ****
+Current learning rate: 0.000001
+2025-06-04 17:10:04.438851
+Namespace(g1b_root='/home/seung/Workspaces/Datasets/GraspNet-1Billion/grasp_qnet', acronym_root='/home/seung/Workspaces/Datasets/ACRONYM/grasp_qnet', net='dgcnn', ckpt_path=None, log_dir='debug', max_epoch=200, batch_size=128, num_workers=2, learning_rate=1e-05, min_learning_rate=1e-07, weight_decay=0.0001, resume=False, pretrained=False, evals_per_epoch=4, save_best_only=True, warmup_iters=5000, warmup_factor=0.1, step_size_iters=10000, step_gamma=0.7, gradient_clip=1.0, use_normal=False, real_ratio=0.5)

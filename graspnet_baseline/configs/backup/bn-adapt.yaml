@@ -1,0 +1,26 @@
+# GraspNet Testing Configuration
+
+# Dataset settings
+dataset:
+  root: "/home/seung/Workspaces/Datasets/GraspNet-1Billion"
+  camera: "realsense"  # Camera split [realsense/kinect]
+  split: "test_similar_mixed_mini"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+  num_point: 20000  # Point Number
+  num_view: 300  # View Number
+
+# Model settings
+graspnet:
+  ckpt_path: "ckpts/checkpoint-rs.tar"
+  collision_thresh: 0.01  # Collision Threshold in collision detection 
+  voxel_size: 0.01  # Voxel Size to process point clouds before collision detection
+
+# Test-time adaptation settings
+tta:
+  batch_size: 1  
+  method: "bn-adapt"  # Test Time Adaptation methods [none/ema/cotta/testadagrasp/tent/bn-1/alpha-bn]
+
+# Other settings
+seed: 7  # Random seed
+mode: "infereval" 
+dump_dir: "logs/bn-adapt-bs1"
+num_workers: 8  # Number of workers used in evaluation
