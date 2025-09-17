@@ -221,11 +221,48 @@ def load_grasp_labels(root, target_obj_ids=None):
 
 
 
-def process_grasp_data(item_data, debug_visualization=False):
-    """Process a single grasp data item"""
-    (scene_name, img_num, obj_id, obj_idx, dataset_root, camera, out_dir, 
-     valid_obj_idxs, grasp_labels, num_cloud_points, num_gripper_points) = item_data
+def process_grasp_data(args):
+    
+    global graspnet, grasp_labels, valid_obj_idxs
+    dataset_root = '/home/seung/Datasets/GraspNet-1Billion'
 
+    """Process a single grasp data item"""
+    # (scene_name, img_num, obj_id, obj_idx, dataset_root, camera, out_dir, 
+    #  valid_obj_idxs, grasp_labels, num_cloud_points, num_gripper_points) = item_data
+    num_cloud_points = 1024
+    split, camera, out_dir = args
+
+    if split == 'train':
+        scene_ids = list(range(100))
+    elif split == 'test':
+        scene_ids = list(range(100, 190))
+    elif split == 'test_seen':
+        scene_ids = list(range(100, 130))
+    elif split == 'test_similar':
+        scene_ids = list(range(130, 160))
+    elif split == 'test_novel':
+        scene_ids = list(range(160, 190))
+    else:
+        raise ValueError(f"Invalid split: {split}")
+    
+    # select random scene_id
+    scene_id = np.random.choice(scene_ids, 1)[0]
+    scene_name = f'scene_{str(scene_id).zfill(4)}'
+    with open(os.path.join(dataset_root, 'scenes', scene_name, 'object_id_list.txt')) as f:
+        obj_ids = [int(line.strip()) for line in f.readlines()]
+    valid_obj_ids = []
+    obj_idxs = []
+    for obj_idx, obj_id in enumerate(obj_ids):
+        if obj_id + 1 in valid_obj_idxs:
+            valid_obj_ids.append(obj_id + 1)
+            obj_idxs.append(obj_idx)
+    
+    # select random object
+    rand_idx = np.random.choice(len(valid_obj_ids), 1)[0]
+    obj_id = valid_obj_ids[rand_idx]
+    obj_idx = obj_idxs[rand_idx]
+    img_num = np.random.choice(256, 1)[0]
+    
 
     depth_path = os.path.join(dataset_root, 'scenes', scene_name, camera, 'depth', str(img_num).zfill(4)+'.png')
     label_path = os.path.join(dataset_root, 'scenes', scene_name, camera, 'label', str(img_num).zfill(4)+'.png')
@@ -248,7 +285,6 @@ def process_grasp_data(item_data, debug_visualization=False):
     seg_masked = seg[mask]
     
     
-    
     if obj_id not in valid_obj_idxs:
         return None
     if (seg_masked == obj_id).sum() < 50:
@@ -262,7 +298,7 @@ def process_grasp_data(item_data, debug_visualization=False):
     obj_cloud = cloud_masked[seg_masked==obj_id]
 
     # remove invisible grasp points
-    visible_mask = remove_invisible_grasp_points(obj_cloud, points, poses[:,:,obj_idx], th=0.01)
+    visible_mask = remove_invisible_grasp_points(obj_cloud, points, poses[:,:,obj_idx], th=0.05)
     points = points[visible_mask]
     offsets = offsets[visible_mask]
     fric_coefs = fric_coefs[visible_mask]
@@ -290,7 +326,8 @@ def process_grasp_data(item_data, debug_visualization=False):
     depths = depths.reshape((-1))
     widths = widths.reshape((-1))
     fric_coefs = fric_coefs.reshape((-1))
-
+    scores = (1.1 - fric_coefs).reshape(-1,1)
+    scores[fric_coefs == 0] = 0
     Rs = batch_viewpoint_params_to_matrix(-views, angles)
 
     num_grasp = widths.shape[0]
@@ -302,274 +339,260 @@ def process_grasp_data(item_data, debug_visualization=False):
     object_ids = obj_idx * np.ones((num_grasp,1), dtype=np.int32)
 
     # random select n_grasps
-    # uniformly sample grasp points from fric_coefs 0 to 1.0 with 0.1 interval
-    target_fric_coefs = np.random.choice(np.arange(0, 1.1, 0.1), 1)
-    target_idxs = np.where(np.isclose(fric_coefs, target_fric_coefs, atol=0.001))[0]
-    target_idxs = target_idxs[widths[target_idxs].reshape(-1) <= 0.1 + 1e-5]
-    
-    if len(target_idxs) == 0:
-        return None, None, None, None, None, None
-    target_idx = np.random.choice(target_idxs, 1)
-    target_points = target_points[target_idx]
-    fric_coefs = fric_coefs[target_idx]
-    scores = (1.1 - fric_coefs).reshape(-1,1)
-    scores[fric_coefs == 0] = 0
-    widths = widths[target_idx]
-    heights = heights[target_idx]
-    depths = depths[target_idx]
-    rotations = rotations[target_idx]
-    object_ids = object_ids[target_idx]
-    grasps = np.hstack([scores, widths, heights, depths, rotations, target_points, object_ids]).astype(np.float32) # [N, 17]
+    # uniformly sample grasp points from score
+    for k in range(10):
+            
+        target_score = np.random.choice(np.arange(0.1, 1.1, 0.1), 1)
+        target_idxs = np.where(np.isclose(scores, target_score, atol=0.001))[0]
+        target_idxs = target_idxs[widths[target_idxs].reshape(-1) <= 0.1 + 1e-5]
+        if len(target_idxs) == 0:
+            print('No valid grasp found for score {}, try again'.format(target_score))
+            continue
+        target_idx = np.random.choice(target_idxs, 1)
+        target_point = target_points[target_idx]
+        score = scores[target_idx]
 
-    # transform scene to gripper frame
-    inv_pose = np.eye(4)
-    inv_pose[:3, :4] = pose
-    inv_pose = np.linalg.inv(inv_pose)[:3,:4]
-    # obj_cloud = cloud_masked
-    obj_cloud = transform_point_cloud(obj_cloud, inv_pose, '3x4')
+        width = widths[target_idx]
+        height = heights[target_idx]
+        depth = depths[target_idx]
+        rotation = rotations[target_idx]
+        object_id = object_ids[target_idx]
+        grasp = np.hstack([score, width, height, depth, rotation, target_point, object_id]).astype(np.float32) # [1, 17]
 
-    ## parse grasp parameters
-    grasp_points = grasps[:, 13:16]
-    grasp_poses = grasps[:, 4:13].reshape([-1,3,3])
-    grasp_depths = grasps[:, 3]
-    grasp_widths = grasps[:, 1]
+        # transform scene to gripper frame
+        inv_pose = np.eye(4)
+        inv_pose[:3, :4] = pose
+        inv_pose = np.linalg.inv(inv_pose)[:3,:4]
+        obj_cloud_ = transform_point_cloud(obj_cloud, inv_pose, '3x4')
 
-    # transform scene to gripper frame
-    target = (obj_cloud[np.newaxis,:,:] - grasp_points[:,np.newaxis,:])
-    target = np.matmul(target, grasp_poses)
+        ## parse grasp parameters
+        grasp_points = grasp[:, 13:16]
+        grasp_poses = grasp[:, 4:13].reshape([-1,3,3])
+        grasp_depths = grasp[:, 3]
+        grasp_widths = grasp[:, 1]
 
-    ## crop the object in gripper closing area
-    height = 0.06
-    depth_base = 0.02
-    depth_outer = 0.05
-    mask1 = ((target[:,:,2]>-height/2) & (target[:,:,2]<height/2))
-    mask2 = ((target[:,:,0]>-depth_base) & (target[:,:,0]<grasp_depths[:,np.newaxis] + depth_outer))
-    mask4 = (target[:,:,1]<-grasp_widths[:,np.newaxis]/2)
-    mask6 = (target[:,:,1]>grasp_widths[:,np.newaxis]/2)
-    inner_mask = (mask1 & mask2 &(~mask4) & (~mask6)) # [n_batch, n_points]
-    obj_cloud_inner = obj_cloud[inner_mask[0]]
+        # transform scene to gripper frame
+        target = (obj_cloud_[np.newaxis,:,:] - grasp_points[:,np.newaxis,:])
+        target = np.matmul(target, grasp_poses)
 
-    # random sample n_points
-    print(obj_cloud_inner.shape[0])
-    if obj_cloud_inner.shape[0] >= num_cloud_points:
-        obj_cloud_inner = obj_cloud_inner[np.random.choice(obj_cloud_inner.shape[0], num_cloud_points, replace=False)]
-    elif obj_cloud_inner.shape[0] < 512:
-        return None
-    else:
-        obj_cloud_inner = upsample_point_cloud(obj_cloud_inner, num_cloud_points)
-    
-    # sample gripper points
-    gg = GraspGroup(grasps)
-    mfcdetector = ModelFreeCollisionDetector(obj_cloud_inner, voxel_size=0.01)
-    collision_mask = mfcdetector.detect(gg, approach_dist=0.05, collision_thresh=0.01)
-    g = gg[0]
-    if collision_mask.sum() == 1:
-        return
-        # g.score = 0
-        # print('Collision detected')
+        ## crop the object in gripper closing area
+        height = 0.06
+        depth_base = 0.02
+        depth_outer = 0.05
+        mask1 = ((target[:,:,2]>-height/2) & (target[:,:,2]<height/2))
+        mask2 = ((target[:,:,0]>-depth_base) & (target[:,:,0]<grasp_depths[:,np.newaxis] + depth_outer))
+        mask4 = (target[:,:,1]<-grasp_widths[:,np.newaxis]/2)
+        mask6 = (target[:,:,1]>grasp_widths[:,np.newaxis]/2)
+        inner_mask = (mask1 & mask2 &(~mask4) & (~mask6)) # [n_batch, n_points]
+        obj_cloud_inner = obj_cloud_[inner_mask[0]]
+
+        # random sample n_points
+        if obj_cloud_inner.shape[0] >= num_cloud_points:
+            obj_cloud_inner = obj_cloud_inner[np.random.choice(obj_cloud_inner.shape[0], num_cloud_points, replace=False)]
+        elif obj_cloud_inner.shape[0] < 512:
+            continue
+        else:
+            obj_cloud_inner = upsample_point_cloud(obj_cloud_inner, num_cloud_points)
         
-    gripper_points = generate_gripper_points(g)
-    gripper_cloud = np.asarray(gripper_points)
-    
-    
-    gripper_pcd_new = o3d.geometry.PointCloud()
-    gripper_pcd_new.points = o3d.utility.Vector3dVector(gripper_points)
-    gripper_pcd_new.paint_uniform_color([0, 0, 1])  # red
-
+        # sample gripper points
+        gg = GraspGroup(grasp)
+        mfcdetector = ModelFreeCollisionDetector(obj_cloud_inner, voxel_size=0.01)
+        collision_mask = mfcdetector.detect(gg, approach_dist=0.05, collision_thresh=0.01)
+        g = gg[0]
+        if collision_mask.sum() == 1:
+            continue
+            # g.score = 0
+            # print('Collision detected')
+            
+        gripper_points = generate_gripper_points(g)
+        gripper_cloud = np.asarray(gripper_points)
+        se3 = np.eye(4)
+        se3[:3,:3] = g.rotation_matrix.reshape(3,3)
+        se3[:3,3] = g.translation
+        se3 = np.linalg.inv(se3)
+        obj_cloud_inner = np.matmul(obj_cloud_inner, se3[:3,:3].T) + se3[:3,3]
         
-    # gripper_pcd = g.to_open3d_geometry().sample_points_uniformly(num_gripper_points)
-    # gripper_cloud = np.asarray(gripper_pcd.points)
-    # gripper_pcd.paint_uniform_color([0, 1, 0])  # green
+        # gripper_pcd_new = o3d.geometry.PointCloud()
+        # gripper_pcd_new.points = o3d.utility.Vector3dVector(gripper_points)
+        # gripper_pcd_new.paint_uniform_color([0, 0, 1])  # red
+        # obj_cloud_inner_pcd = o3d.geometry.PointCloud()
+        # obj_cloud_inner_pcd.points = o3d.utility.Vector3dVector(obj_cloud_inner)
+        # obj_cloud_inner_pcd.paint_uniform_color([1, 0, 0])  # green
+        # coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
+        # o3d.visualization.draw_geometries([obj_cloud_inner_pcd, coord_frame, gripper_pcd_new])
 
-    # align cloud to gripper frame
-    se3 = np.eye(4)
-    se3[:3,:3] = g.rotation_matrix.reshape(3,3)
-    se3[:3,3] = g.translation
-    se3 = np.linalg.inv(se3)
-    # gripper_pcd.transform(se3)
-    obj_cloud_inner = np.matmul(obj_cloud_inner, se3[:3,:3].T) + se3[:3,3]
-    
-    
-    # Optional visualization in debug mode
-    # if debug_visualization:
-    # obj_cloud_inner_pcd = o3d.geometry.PointCloud()
-    # obj_cloud_inner_pcd.points = o3d.utility.Vector3dVector(obj_cloud_inner)
-    # obj_cloud_inner_pcd.paint_uniform_color([1, 0, 0])  # green
-    # coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
-    # o3d.visualization.draw_geometries([obj_cloud_inner_pcd, coord_frame, gripper_pcd_new])
+        obj_cloud_inner = obj_cloud_inner.astype(np.float32)
+        gripper_cloud = gripper_cloud.astype(np.float32)
+        score_val = np.round(g.score, 2).astype(np.float32)
 
-    obj_cloud_inner = obj_cloud_inner.astype(np.float32)
-    gripper_cloud = gripper_cloud.astype(np.float32)
-    score_val = np.round(g.score, 2).astype(np.float32)
-
-    # Create unique filename
-    target_fric_coef_val = float(target_fric_coefs[0])
-    target_idx_val = int(target_idx[0])
-    save_path = os.path.join(out_dir, f'{scene_name}_{img_num:06d}_{obj_id:04d}_{target_fric_coef_val:.1f}_{target_idx_val:08d}.h5')
-    
-    # Create atomic file write through temporary file
-    temp_path = f"{save_path}.tmp"
-    with h5py.File(temp_path, 'w') as f:
-        f.create_dataset('obj_cloud', data=obj_cloud_inner)
-        f.create_dataset('gripper_cloud', data=gripper_cloud)
-        f.create_dataset('score', data=score_val)
-        f.create_dataset('scene_id', data=np.string_(scene_name))
-        f.create_dataset('img_id', data=img_num)
-        f.create_dataset('obj_id', data=obj_id)
-    
-    # Atomic rename to avoid partial files
-    os.rename(temp_path, save_path)
-    
-    return save_path
+        # Create unique filename
+        target_fric_coef_val = float(target_score[0])
+        target_idx_val = int(target_idx[0])
+        save_path = os.path.join(out_dir, f'{scene_name}_{img_num:06d}_{obj_id:04d}_{target_fric_coef_val:.1f}_{target_idx_val:08d}.h5')
+        
+        # Create atomic file write through temporary file
+        temp_path = f"{save_path}.tmp"
+        with h5py.File(temp_path, 'w') as f:
+            f.create_dataset('obj_cloud', data=obj_cloud_inner)
+            f.create_dataset('gripper_cloud', data=gripper_cloud)
+            f.create_dataset('score', data=score_val)
+            f.create_dataset('scene_id', data=np.string_(scene_name))
+            f.create_dataset('img_id', data=img_num)
+            f.create_dataset('obj_id', data=obj_id)
+        
+        # Atomic rename to avoid partial files
+        os.rename(temp_path, save_path)
+        
+    return 1
 
 
-def init_worker():
-    """Initialize worker process"""
-    # Disable Open3D logging in worker processes
-    o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Error)
+# def init_worker():
+#     """Initialize worker process"""
+#     # Disable Open3D logging in worker processes
+#     o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Error)
     
-    # Set lower thread count for NumPy in each worker to prevent thread explosion
-    import os
-    os.environ["OMP_NUM_THREADS"] = "1"
-    os.environ["MKL_NUM_THREADS"] = "1"
-    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+#     # Set lower thread count for NumPy in each worker to prevent thread explosion
+#     import os
+#     os.environ["OMP_NUM_THREADS"] = "1"
+#     os.environ["MKL_NUM_THREADS"] = "1"
+#     os.environ["NUMEXPR_NUM_THREADS"] = "1"
     
-    # NumPy doesn't have set_num_threads directly
-    try:
-        import mkl
-        mkl.set_num_threads(1)
-    except ImportError:
-        pass
+#     # NumPy doesn't have set_num_threads directly
+#     try:
+#         import mkl
+#         mkl.set_num_threads(1)
+#     except ImportError:
+#         pass
 
-def generate_task_list(dataset_root, valid_obj_idxs, camera, split):
-    """Generate a list of tasks to be processed in parallel"""
-    tasks = []
+# Global variables for worker processes
+graspnet = None
+grasp_labels = None
+valid_obj_idxs = None
+
+def init_worker(dataset_root, camera, split):
+    """Initialize each worker process with shared data"""
+    global graspnet, grasp_labels, valid_obj_idxs
     
-    if split == 'train':
-        scene_ids = list(range(100))
-    elif split == 'test':
-        scene_ids = list(range(100, 190))
-    elif split == 'test_seen':
-        scene_ids = list(range(100, 130))
-    elif split == 'test_similar':
-        scene_ids = list(range(130, 160))
-    elif split == 'test_novel':
-        scene_ids = list(range(160, 190))
-    else:
-        raise ValueError(f"Invalid split: {split}")
+    # Suppress output in worker processes
     
-    scene_names = [f'scene_{str(x).zfill(4)}' for x in scene_ids]
+    print("Initializing worker...")
     
-    # Build task list
-    for scene_name in scene_names:
-        for img_num in range(256):
-            try:
-                with open(os.path.join(dataset_root, 'scenes', scene_name, 'object_id_list.txt')) as f:
-                    obj_ids = [int(line.strip()) for line in f.readlines()]
-                
-                for obj_idx, obj_id in enumerate(obj_ids):
-                    if obj_id + 1 not in valid_obj_idxs:
-                        continue
-                        
-                    tasks.append((scene_name, img_num, obj_id + 1, obj_idx))
-            except Exception as e:
-                print(f"Error loading object list for {scene_name}: {str(e)}")
+    # Initialize GraspNet for this worker
+    graspnet = GraspNet(dataset_root, camera=camera, split=split)
     
-    return tasks
+    # Load grasp labels once per worker
+    valid_obj_idxs, grasp_labels = load_grasp_labels(dataset_root, graspnet.getObjIds(graspnet.getSceneIds()))
+    
+    print(f"Worker initialized with {len(grasp_labels)} grasp labels")
+
 
 def main():
     # Configuration
     dataset_root = '/home/seung/Datasets/GraspNet-1Billion'
+    
     out_root = dataset_root + '/grasp_qnet_new'
-    camera = 'kinect'
+    camera = 'realsense'
     split = 'train'  # Options: train, test, test_seen, test_similar, test_novel
-    num_cloud_points = 1024
-    num_gripper_points = 128
     max_samples = 200000  # Maximum number of samples to generate
-    num_processes = 4
-    debug_visualization = False  # Set to True to enable visualization
+    num_processes = 4  # 더 많은 프로세스 사용
     
     out_dir = os.path.join(out_root, camera, split)
     os.makedirs(out_dir, exist_ok=True)
     print(f"Output directory: {out_dir}")
     
-    # Get existing file count - just count the files directly instead of globbing
+    # Get existing file count
     existing_count = len([f for f in os.listdir(out_dir) if f.endswith('.h5')])
     if existing_count > 0:
         print(f"Found {existing_count} existing samples. Will generate up to {max_samples - existing_count} more.")
     
-    # Initialize GraspNet and load grasp labels
-    print("Loading grasp data...")
-    g = GraspNet(dataset_root, camera=camera, split=split)
-    
-    # Load grasp labels - consider loading on demand to save memory
-    valid_obj_idxs, grasp_labels = load_grasp_labels(dataset_root, g.getObjIds(g.getSceneIds()))
-    
-    # Generate individual tasks
-    print("Generating task list...")
-    tasks = generate_task_list(dataset_root, valid_obj_idxs, camera, split)
-    print(f"Generated {len(tasks)} tasks")
-    
-    # Shuffle tasks for better load balancing
-    import random
-    random.shuffle(tasks)
+    # Get scene list for task distribution
+    print("Getting scene list...")
+    temp_g = GraspNet(dataset_root, camera=camera, split=split)
+    scene_ids = temp_g.getSceneIds()
+    print(f"Found {len(scene_ids)} scenes")
     
     # Set up multiprocessing
     print(f"Starting {num_processes} worker processes")
     
-    # Create process pool with initializer to suppress output
-    with mp.Pool(processes=num_processes, initializer=init_worker) as pool:
-        # Process individual tasks
-        results = []
+    # Create process pool with initializer
+    with mp.Pool(
+        processes=num_processes, 
+        initializer=init_worker,
+        initargs=(dataset_root, camera, split)
+    ) as pool:
         
-        # Create arguments for each task
-        task_args = [
-            (scene_name, img_num, obj_id, obj_idx, dataset_root, camera, out_dir, 
-             valid_obj_idxs, grasp_labels, num_cloud_points, num_gripper_points)
-            for scene_name, img_num, obj_id, obj_idx in tasks
-        ]
-        
-        # Use a larger chunksize for better efficiency with many small tasks
-        # This significantly reduces overhead for dispatching tasks
-        chunksize = max(1, min(500, len(task_args) // (num_processes * 10)))
+        # Create tasks - one per scene
+        scene_tasks = [(split, camera, out_dir) for _ in range(max_samples)]  # 원
         
         try:
+            import time
+            start_time = time.time()
+            
             # Process tasks in parallel
-            task_iter = pool.imap(
-                partial(process_grasp_data, debug_visualization=debug_visualization), 
-                task_args, 
-                chunksize=chunksize
-            )
+            print(f"Processing {len(scene_tasks)} tasks...")
+            print("Starting sample generation...")
             
-            # Manual progress reporting since tqdm might not work in all environments
-            total_tasks = len(task_args)
-            processed = 0
+            results = []
+            processed_count = 0
             
-            print(f"Starting processing of {total_tasks} tasks...")
-            for result in task_iter:
-                processed += 1
+            # 배치 단위로 처리하여 진행률 확인
+            batch_size = min(100, len(scene_tasks))
+            
+            for i in range(0, len(scene_tasks), batch_size):
+                batch_tasks = scene_tasks[i:i+batch_size]
+                batch_results = pool.map(process_grasp_data, batch_tasks)
                 
-                if result:
-                    results.append(result)
+                # 결과 수집
+                successful_results = [r for r in batch_results if r is not None]
+                results.extend(successful_results)
+                processed_count += len(batch_tasks)
+                
+                # 진행률 및 예상 시간 계산
+                current_time = time.time()
+                elapsed_time = current_time - start_time
+                
+                if processed_count > 0:
+                    avg_time_per_task = elapsed_time / processed_count
+                    remaining_tasks = len(scene_tasks) - processed_count
+                    estimated_remaining_time = avg_time_per_task * remaining_tasks
+                    
+                    # 시간 포맷팅
+                    def format_time(seconds):
+                        hours = int(seconds // 3600)
+                        minutes = int((seconds % 3600) // 60)
+                        secs = int(seconds % 60)
+                        if hours > 0:
+                            return f"{hours}h {minutes}m {secs}s"
+                        elif minutes > 0:
+                            return f"{minutes}m {secs}s"
+                        else:
+                            return f"{secs}s"
+                    
+                    success_rate = len(successful_results) / len(batch_tasks) * 100
                     total_samples = len(results) + existing_count
                     
-                    # Print progress periodically
-                    if len(results) % 10 == 0 or processed % 100 == 0:
-                        print(f"Processed {processed}/{total_tasks} tasks, generated {len(results)} samples, total: {total_samples}")
-                    
-                    # Stop if we've reached the target number of samples
-                    if total_samples >= max_samples:
-                        print(f"Reached target of {max_samples} samples. Stopping.")
-                        pool.terminate()
-                        break
+                    print(f"Progress: {processed_count}/{len(scene_tasks)} tasks "
+                        f"({processed_count/len(scene_tasks)*100:.1f}%) | "
+                        f"Generated: {len(results)} samples | "
+                        f"Total: {total_samples} | "
+                        f"Success rate: {success_rate:.1f}% | "
+                        f"Elapsed: {format_time(elapsed_time)} | "
+                        f"Estimated remaining: {format_time(estimated_remaining_time)}")
+                
+                # 목표 달성 시 중단
+                if total_samples >= max_samples:
+                    print(f"Reached target of {max_samples} samples. Stopping.")
+                    pool.terminate()
+                    break
+            
+            total_time = time.time() - start_time
+            print(f"\nProcessing complete in {format_time(total_time)}!")
+            
+            
         except KeyboardInterrupt:
             print("Interrupted by user. Terminating workers...")
             pool.terminate()
             pool.join()
-    
-    final_sample_count = len([f for f in os.listdir(out_dir) if f.endswith('.h5')])
-    print(f"Processing complete. Total samples: {final_sample_count}")
-    print(f"Generated {len(results)} new samples")
 
 if __name__ == "__main__":
     # Import in main function to reduce overhead
