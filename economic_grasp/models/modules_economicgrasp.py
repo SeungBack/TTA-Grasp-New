@@ -13,14 +13,22 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR + '/utils')
 from loss_utils import generate_grasp_views, batch_viewpoint_params_to_matrix
 
+from .adapter import LoRAAdapter
+
+
 
 class GraspableNet(nn.Module):
-    def __init__(self, seed_feature_dim):
+    def __init__(self, seed_feature_dim, use_lora=False):
         super().__init__()
         self.in_dim = seed_feature_dim
         self.conv_graspable = nn.Conv1d(self.in_dim, 3, 1)
+        self.use_lora = use_lora
+        if self.use_lora:
+            self.lora_grasp = LoRAAdapter(self.in_dim, self.in_dim)
 
     def forward(self, seed_features, end_points):
+        if self.use_lora:
+            seed_features = self.lora_grasp(seed_features)
         graspable_score = self.conv_graspable(seed_features)  # [B, 3, 20000]
         end_points['objectness_score'] = graspable_score[:, :2]
         end_points['graspness_score'] = graspable_score[:, 2]
@@ -28,17 +36,23 @@ class GraspableNet(nn.Module):
 
 
 class ViewNet(nn.Module):
-    def __init__(self, num_view, seed_feature_dim, is_training=True, is_tta=False):
+    def __init__(self, num_view, seed_feature_dim, is_training=True, use_lora=False):
         super().__init__()
         self.num_view = num_view
         self.in_dim = seed_feature_dim
         self.is_training = is_training
         self.conv1 = nn.Conv1d(self.in_dim, self.in_dim, 1)
         self.conv2 = nn.Conv1d(self.in_dim, self.num_view, 1)
+        
+        self.use_lora = use_lora
+        if self.use_lora:
+            self.lora_view = LoRAAdapter(self.in_dim, self.in_dim)
 
     def forward(self, seed_features, end_points):
         B, _, num_seed = seed_features.size()
         res_features = F.relu(self.conv1(seed_features), inplace=True)
+        if self.use_lora:
+            res_features = self.lora_view(res_features)
         features = self.conv2(res_features)
         view_score = features.transpose(1, 2).contiguous()  # [B, 1024, 300]
         end_points['view_score'] = view_score
@@ -74,7 +88,7 @@ class ViewNet(nn.Module):
 
 
 class Cylinder_Grouping_Global_Interaction(nn.Module):
-    def __init__(self, nsample, seed_feature_dim, cylinder_radius=0.05, hmin=-0.02, hmax=0.04):
+    def __init__(self, nsample, seed_feature_dim, cylinder_radius=0.05, hmin=-0.02, hmax=0.04, use_lora=False):
         super().__init__()
         self.nsample = nsample
         self.in_dim = seed_feature_dim
@@ -87,6 +101,7 @@ class Cylinder_Grouping_Global_Interaction(nn.Module):
         # local interaction module
         self.local_interaction_module = AttentionModule(dim=3 + 256, n_head=1, msa_dropout=0.05)
         self.mlps2 = pt_utils.SharedMLP(mlps2, bn=True)
+        
 
     def forward(self, seed_xyz_graspable, seed_features_graspable, vp_rot):
         coords = seed_xyz_graspable.transpose(-1, -2).unsqueeze(-1).expand(-1, -1, -1, self.nsample)
@@ -98,11 +113,15 @@ class Cylinder_Grouping_Global_Interaction(nn.Module):
         new_features = self.mlps2(new_features)
         new_features = F.max_pool2d(new_features, kernel_size=[1, new_features.size(3)])
         new_features = new_features.squeeze(-1)
+        
+        # if self.use_lora:
+        #     new_features = self.lora_cy(new_features)
+        
         return new_features
 
 
 class Grasp_Head_Local_Interaction(nn.Module):
-    def __init__(self, num_angle, num_depth):
+    def __init__(self, num_angle, num_depth, use_lora=False):
         super().__init__()
         self.num_angle = num_angle
         self.num_depth = num_depth
@@ -119,14 +138,25 @@ class Grasp_Head_Local_Interaction(nn.Module):
         self.conv_depth = nn.Conv1d(64, num_depth + 1, 1)
         self.conv_width = nn.Conv1d(64, 1, 1)
         self.conv_score = nn.Conv1d(64, 6, 1)  # use classification for score learning
+        
+        self.use_lora = use_lora
+        if self.use_lora:
+            # self.lora_grasp = LoRAAdapter(256, 256)
+            
+
 
     def forward(self, vp_features, end_points):
         B, _, num_seed = vp_features.size()
+
+        if self.use_lora:
+            vp_features = self.lora_grasp(vp_features)
+
 
         angle_features = self.conv_angle_feature(vp_features)
         depth_features = self.conv_depth_feature(vp_features)
         width_features = self.conv_width_feature(vp_features)
         score_features = self.conv_score_feature(vp_features)
+
 
         angle_features = angle_features.permute(0, 2, 1).contiguous().view(-1, 64).unsqueeze(1)
         depth_features = depth_features.permute(0, 2, 1).contiguous().view(-1, 64).unsqueeze(1)
@@ -145,6 +175,12 @@ class Grasp_Head_Local_Interaction(nn.Module):
         depth_features = self.conv_depth(depth_features)
         width_features = self.conv_width(width_features)
         score_features = self.conv_score(score_features)
+        
+        if self.use_lora:
+            angle_features = self.lora_angle(angle_features)
+            depth_features = self.lora_depth(depth_features)
+            width_features = self.lora_width(width_features)
+            score_features = self.lora_score(score_features)
 
         # split prediction
         end_points['grasp_angle_pred'] = angle_features  # [B, 12, num_points]

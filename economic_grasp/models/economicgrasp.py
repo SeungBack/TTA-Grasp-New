@@ -14,6 +14,7 @@ from label_generation import process_grasp_labels, process_grasp_pseudo_label, b
 from libs.pointnet2.pointnet2_utils import furthest_point_sample, gather_operation
 from arguments import cfgs
 
+from .adapter import LoRAAdapter
 
 def load_economicgrasp(cfg, device):
     """Load and initialize model."""
@@ -45,6 +46,10 @@ class EconomicGrasp(nn.Module):
         self.num_view = cfgs.num_view
         self.voxel_size = voxel_size
         self.cfg = cfg
+        
+        self.use_lora = self.cfg.tta.lora.use_lora
+        if self.use_lora:
+            self.lora_backbone = LoRAAdapter(self.seed_feature_dim, self.seed_feature_dim) #, self.cfg.tta.lora.r, self.cfg.tta.lora.alpha, self.cfg.tta.lora.dropout)
 
         # Backbone
         self.backbone = TDUnet(in_channels=3, out_channels=self.seed_feature_dim, D=3)
@@ -54,14 +59,15 @@ class EconomicGrasp(nn.Module):
 
         # View Selection
         self.view = ViewNet(self.num_view, seed_feature_dim=self.seed_feature_dim, 
-                            is_training=self.is_training or (self.cfg and self.cfg.tta.method in ['tta-grasp', 'cotta']))
+                            is_training=self.is_training or (self.cfg and self.cfg.tta.method in ['tta-grasp', 'cotta']),
+                            use_lora=self.use_lora)
 
         # Cylinder Grouping
         self.cy_group = Cylinder_Grouping_Global_Interaction(nsample=16, cylinder_radius=cylinder_radius,
                                                             seed_feature_dim=self.seed_feature_dim)
 
         # Depth and Score searching
-        self.grasp_head = Grasp_Head_Local_Interaction(num_angle=self.num_angle, num_depth=self.num_depth)
+        self.grasp_head = Grasp_Head_Local_Interaction(num_angle=self.num_angle, num_depth=self.num_depth, use_lora=self.use_lora)
 
     def forward(self, end_points):
         seed_xyz = end_points['point_clouds']  # use all sampled point cloud, [B, point_num (15000)， 3]
@@ -85,6 +91,9 @@ class EconomicGrasp(nn.Module):
         seed_features = self.backbone(mink_input).F
         seed_features = seed_features[end_points['quantize2original']].view(B, point_num, -1).transpose(1, 2)
         # [B (batch size), 512 (feature dim), 20000 (points in a scene)]
+        if self.use_lora:
+            seed_features = self.lora_backbone(seed_features)
+
 
         # Generate the masks of the objectness and the graspness
         end_points = self.graspable(seed_features, end_points)
@@ -227,7 +236,6 @@ def pred_decode_raw(end_points):
         grasp_preds.append(
             torch.cat([grasp_score, grasp_width, grasp_height, grasp_depth, grasp_rot, grasp_center, obj_ids], axis=-1))
         grasp_angles.append(grasp_angle)
-        
         # view scores
     grasp_preds = torch.stack(grasp_preds, dim=0)
     grasp_angles = torch.stack(grasp_angles, dim=0)

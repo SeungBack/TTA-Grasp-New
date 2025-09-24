@@ -14,7 +14,8 @@ num_pairs_to_process = 100  # Set to None to process all pairs
 dump_folder = '/home/seung/Workspaces/grasp/TestAdaGrasp/economic_grasp/logs'
 root = '/home/seung/Datasets/GraspNet-1Billion'
 # Methods to compare (exactly two)
-methods = ['graspnet1b/tta-grasp/debug_default', 'graspnet1b/tta-grasp/debug_default_optim']
+methods = ['graspnet1b/notta/realsense_similar_mini', 'graspnet1b/tta-grasp/debug_lora_conv_r8']
+methods = ['graspnet1b/tta-grasp/debug_lora_conv_r8_1', 'graspnet1b/tta-grasp/debug_lora_conv_r8_gh_2']
 
 method_names = ['notta', 'tta-grasp']  # Simplified names for display
 sigma = 1  # Sigma for smoothing

@@ -160,9 +160,12 @@ def compute_depth_loss(end_points):
 def compute_score_loss_cls(end_points):
     criterion = nn.CrossEntropyLoss(reduction='none')
     grasp_score_pred = end_points['grasp_score_pred']
-    grasp_score_label = (end_points['batch_grasp_score'] * 10 / 2).long()
+    # grasp_score_label = (end_points['batch_grasp_score'] * 10 / 2).long()
+    grasp_score_label = torch.round(end_points['batch_grasp_score'] * 5).long()  # 0,0.2,0.4,0.6,0.8,1 -> 0,1,2,3,4,5
+
     valid_mask = end_points['batch_valid_mask']
     loss = criterion(grasp_score_pred.squeeze(1), grasp_score_label)
+    # print(torch.argmax(grasp_score_pred, 1), grasp_score_label)
     if torch.sum(valid_mask) == 0:
         loss = 0 * torch.sum(loss)
     else:

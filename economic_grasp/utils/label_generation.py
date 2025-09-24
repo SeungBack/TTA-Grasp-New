@@ -896,7 +896,7 @@ def process_grasp_pseudo_label(end_points):
         # ---- 1) 스칼라/벡터 성분 벡터화 추출 ----
         grasp_points_src = gg_array_ema[:, 13:16]                                # (N,3)
         grasp_scores_src = gg_array_ema[:, 0]                                    # (N,)
-        grasp_widths_src = gg_array_ema[:, 1]                                    # (N,)
+        grasp_widths_src = gg_array_ema[:, 1] / 1.2                     # (N,)
         grasp_depth_src  = ((gg_array_ema[:, 3] / 0.01) - 1).long()              # (N,) 0~3
         grasp_rot_src    = (grasp_angles_ema * A / torch.pi).long()              # (N,) 0~11
         view_graspness_src = view_scores_ema                                     # (N,V)
