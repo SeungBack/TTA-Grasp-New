@@ -28,7 +28,7 @@ class GraspableNet(nn.Module):
 
 
 class ViewNet(nn.Module):
-    def __init__(self, num_view, seed_feature_dim, is_training=True):
+    def __init__(self, num_view, seed_feature_dim, is_training=True, is_tta=False):
         super().__init__()
         self.num_view = num_view
         self.in_dim = seed_feature_dim
@@ -59,7 +59,6 @@ class ViewNet(nn.Module):
             top_view_inds = torch.stack(top_view_inds, dim=0).squeeze(-1) # [B, 1024]
         else:
             _, top_view_inds = torch.max(view_score, dim=2) # [B, 1024]
-
             top_view_inds_ = top_view_inds.view(B, num_seed, 1, 1).expand(-1, -1, -1, 3).contiguous()
             template_views = generate_grasp_views(self.num_view).to(features.device)  # [300, 3]
             template_views = template_views.view(1, 1, self.num_view, 3).expand(B, num_seed, -1, -1).contiguous()

@@ -131,6 +131,8 @@ def compute_angle_loss(end_points):
     if torch.sum(valid_mask) == 0:
         loss = 0 * torch.sum(loss)
     else:
+        if 'batch_grasp_q' in end_points:
+            loss = loss * end_points['batch_grasp_q']
         loss = loss[valid_mask].mean()
     end_points['B: Angle Loss'] = loss
     end_points['D: Angle Acc'] = (torch.argmax(grasp_angle_pred, 1) == grasp_angle_label)[valid_mask].float().mean()
@@ -147,6 +149,8 @@ def compute_depth_loss(end_points):
     if torch.sum(valid_mask) == 0:
         loss = 0 * torch.sum(loss)
     else:
+        if 'batch_grasp_q' in end_points:
+            loss = loss * end_points['batch_grasp_q']
         loss = loss[valid_mask].mean()
     end_points['B: Depth Loss'] = loss
     end_points['D: Depth Acc'] = (torch.argmax(grasp_depth_pred, 1) == grasp_depth_label)[valid_mask].float().mean()
@@ -162,6 +166,8 @@ def compute_score_loss_cls(end_points):
     if torch.sum(valid_mask) == 0:
         loss = 0 * torch.sum(loss)
     else:
+        if 'batch_grasp_q' in end_points:
+            loss = loss * end_points['batch_grasp_q']
         loss = loss[valid_mask].mean()
     end_points['B: Score Loss'] = loss
     end_points['D: Score Acc'] = (torch.argmax(grasp_score_pred, 1) == grasp_score_label)[valid_mask].float().mean()
@@ -177,6 +183,8 @@ def compute_width_loss(end_points):
     if torch.sum(valid_mask) == 0:
         loss = 0 * torch.sum(loss)
     else:
+        if 'batch_grasp_q' in end_points:
+            loss = loss * end_points['batch_grasp_q']
         loss = loss[valid_mask].mean()
     end_points['B: Width Loss'] = loss
     return loss, end_points

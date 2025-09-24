@@ -97,6 +97,10 @@ def inference(cfg, graspnet, dataset_name, split, camera):
         times.append(batch_time)
         if batch_idx % 5000 == 0 and batch_idx != 0:
             tta_method.save_model(iter=batch_idx)
+            
+        for k in end_points:
+            if 'Loss' in k or 'loss' in k:
+                print(f'{k}: {end_points[k]}')
 
         if cfg.use_wandb:
             wandb.log({
@@ -338,19 +342,19 @@ if __name__ == "__main__":
 
     # Define the sweep configuration
     sweep_configuration = {
-        "method": "random",  # "bayes", "grid"
+        "method": "bayes",  # "bayes", "grid"
         "metric": {"goal": "maximize", "name": "{}_AP_mean".format(cfg.eval_dataset.split)},
         "parameters": {
             "loss_type": {"values": ["graspness,view,objectness", "graspness,view", "view"]},
             "ema_ratio": {"values": [0.999, 0.9995, 0.9999, 0.99995, 0.99999]},
             "rst_ratio": {"values": [1.0, 0.1, 0.05, 0.01, 0.001]},
-            "grasp_q_thresh": {"values": [0.3, 0.5, 0.7]},
+            "grasp_q_thresh": {"values": [0/5]},
             "uncertainty_thresh": {"values": [0.03, 0.05, 0.1]},
-            "min_points": {"values": [256, 512, 1024]},
-            "min_grasps": {"values": [0, 64, 128, 256, 512]},
-            "lr": {"values": [0.001, 0.0005, 0.0001]},
+            "min_points": {"values": [512]},
+            "min_grasps": {"values": [0]},
+            "lr": {"values": [0.001,0.0001]},
             "backbone_lr_ratio": {"values": [0.1, 0.5, 1.0]},
-            "uncertainty_n": {"values": [5, 10]}
+            "uncertainty_n": {"values": [5]}
         }
     }
     

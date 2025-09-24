@@ -36,8 +36,10 @@ CUDA_VISIBLE_DEVICES=2 python main.py --cfg  configs/graspnet1b/bn-adapt/realsen
 CUDA_VISIBLE_DEVICES=3 python main.py --cfg  configs/graspnet1b/bn-adapt/realsense_novel_mixed.yaml
 
 
-CUDA_VISIBLE_DEVICES=2 python main.py --cfg configs/graspnet1b/tta-grasp/debug_2.yaml
-CUDA_VISIBLE_DEVICES=1 python main.py --cfg configs/graspnet1b/tta-grasp/debug.yaml
+CUDA_VISIBLE_DEVICES=0 python main.py --cfg configs/graspnet1b/tta-grasp/debug_alpha0.0.yaml
+CUDA_VISIBLE_DEVICES=1 python main.py --cfg configs/graspnet1b/tta-grasp/debug_alpha0.5.yaml
+CUDA_VISIBLE_DEVICES=2 python main.py --cfg configs/graspnet1b/tta-grasp/debug_alpha1.0.yaml
+CUDA_VISIBLE_DEVICES=3 python main.py --cfg configs/graspnet1b/tta-grasp/debug_alpha1.0_uncern.yaml
 
 
 
