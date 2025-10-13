@@ -28,7 +28,7 @@ tta:
   loss_type: "graspness,view"
 
   lora:
-    use_lora: True
+    use_lora: False
     type: conv
     r: 16
     alpha: 16
@@ -41,7 +41,7 @@ tta:
     batch_size: 128
     min_points: 512
     grasp_q_thresh: 0.5 # Grasp score threshold
-    uncertainty_thresh: 0.10 # Uncertainty threshold
+    uncertainty_thresh: 0.05 # Uncertainty threshold
     uncertainty_n : 10
 
   kd:

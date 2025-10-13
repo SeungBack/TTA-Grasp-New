@@ -33,11 +33,8 @@ def get_loss(end_points):
 
 def get_tta_loss(end_points):
     # graspness loss and objectness loss
-    objectness_loss, end_points = compute_objectness_loss(end_points)
-    graspness_loss, end_points = compute_graspness_loss(end_points) 
 
     # # view selecting loss
-    view_loss, end_points = compute_view_graspness_tta_loss(end_points)
 
     # grasp match loss
     angle_loss, end_points = compute_angle_loss(end_points)
@@ -53,11 +50,14 @@ def get_tta_loss(end_points):
            cfgs.score_loss_weight * score_loss + \
            cfgs.width_loss_weight * width_loss
     if 'graspness' in end_points['loss_type']:
+        graspness_loss, end_points = compute_graspness_loss(end_points) 
         loss = loss + cfgs.graspness_loss_weight * graspness_loss
     if 'objectness' in end_points['loss_type']:
         objectness_loss, end_points = compute_objectness_loss(end_points)
+        objectness_loss, end_points = compute_objectness_loss(end_points)
         loss = loss + cfgs.objectness_loss_weight * objectness_loss
     if 'view' in end_points['loss_type']:
+        view_loss, end_points = compute_view_graspness_tta_loss(end_points)
         loss = loss + cfgs.view_loss_weight * view_loss
 
     end_points['A: Overall Loss'] = loss

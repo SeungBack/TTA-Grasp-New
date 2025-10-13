@@ -116,7 +116,7 @@ def run_inference(cfgs):
     all_gt_scores = []
     all_std_devs = []
     
-    threshold = 0.3
+    threshold = 0.5
     fwd_time = 0.0
     
     with torch.no_grad():  # Disable gradient computation
@@ -143,6 +143,9 @@ def run_inference(cfgs):
             all_gt_cls.extend(gt_label.cpu().numpy().astype(int))
             all_pred_scores.extend(pred.cpu().numpy())
             all_gt_scores.extend(gt_score.cpu().numpy())
+            
+            if batch_idx == 100:
+                break
 
             
             
@@ -150,6 +153,7 @@ def run_inference(cfgs):
     all_gt_cls = np.array(all_gt_cls).reshape(-1)
     all_pred_scores = np.array(all_pred_scores).reshape(-1)
     all_gt_scores = np.array(all_gt_scores).reshape(-1)
+    print(all_pred_scores[:10], all_gt_scores[:10])
     if cfgs.mc_dropout:
         all_std_devs = np.array(all_std_devs).reshape(-1)
             
@@ -176,13 +180,13 @@ def run_inference(cfgs):
     plt.close()
     
     # compute percentage of abs_diff < 0.1
-    for thresh in [0.1, 0.15, 0.2]:
+    for thresh in [0.1, 0.15, 0.2, 0.25]:
         acc_thresh = np.sum(abs_diff < thresh) / len(abs_diff)
         print(f"Percentage of valid predictions (abs_diff < {thresh}): {acc_thresh * 100:.2f}%")
     
     # accuracy per std threshold
     if cfgs.mc_dropout:
-        std_thresholds = [0.01 * i for i in range(1, 21)]
+        std_thresholds = [0.01 * i for i in range(1, 11)]
         valid_percentages = []
         accuracies = []
         maes = [] # Create a list to store MAE values
@@ -254,16 +258,13 @@ def run_inference(cfgs):
 
         
         
-        
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # Dataset paths
     parser.add_argument('--g1b_root', type=str, help='G1B dataset root directory',
-                        default='/home/seung/Workspaces/Datasets/GraspNet-1Billion/grasp_qnet')
+                        default='/home/seung/Datasets/GraspNet-1Billion/grasp_qnet_new')
     parser.add_argument('--acronym_root', type=str,
-                        default='/home/seung/Workspaces/Datasets/ACRONYM/grasp_qnet',
+                        default='/home/seung/Datasets/ACRONYM/grasp_qnet_new',
                         help='ACRONYM dataset root directory')
     
     # Model and inference settings

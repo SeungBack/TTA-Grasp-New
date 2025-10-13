@@ -897,8 +897,8 @@ def process_grasp_pseudo_label(end_points):
         grasp_points_src = gg_array_ema[:, 13:16]                                # (N,3)
         grasp_scores_src = gg_array_ema[:, 0]                                    # (N,)
         grasp_widths_src = gg_array_ema[:, 1] / 1.2                     # (N,)
-        grasp_depth_src  = ((gg_array_ema[:, 3] / 0.01) - 1).long()              # (N,) 0~3
-        grasp_rot_src    = (grasp_angles_ema * A / torch.pi).long()              # (N,) 0~11
+        grasp_depth_src  = ((gg_array_ema[:, 3] / 0.01) - 1).long().clamp_(0, D-1)              # (N,) 0~3
+        grasp_rot_src    = (grasp_angles_ema * A / torch.pi).long().clamp_(0, A-1)              # (N,) 0~11
         view_graspness_src = view_scores_ema                                     # (N,V)
 
         # ---- 2) 결과 버퍼 (N 크기 단 1회 할당) ----
@@ -969,13 +969,21 @@ def process_grasp_pseudo_label(end_points):
 
         # 1024개로 인덱싱
         grasp_points_merged = torch.index_select(grasp_points_merged, 0, nn_inds)      # (1024,3)
-        view_graspness_merged = torch.index_select(view_graspness_merged, 0, nn_inds)  # (1024,V)
+        # view_graspness_merged = torch.index_select(view_graspness_merged, 0, nn_inds)  # (1024,V)
         grasp_rotations_merged = torch.index_select(grasp_rot_src.to(torch.int32), 0, nn_inds) # (1024,)
         grasp_depth_merged    = torch.index_select(grasp_depth_src.to(torch.int32),    0, nn_inds) # (1024,)
         grasp_scores_merged   = torch.index_select(grasp_scores_src, 0, nn_inds)       # (1024,)
         grasp_widths_merged   = torch.index_select(grasp_widths_src, 0, nn_inds)       # (1024,)
         grasp_views_rot_merged= torch.index_select(grasp_views_rot_merged, 0, nn_inds) # (1024,V,3,3)
         grasp_top_view_inds_ema = torch.index_select(grasp_top_view_inds_vec, 0, nn_inds).long()  # (1024,)
+
+        # view_graspness_merged = torch.zeros((num_samples, V), device=device, dtype=view_graspness_src.dtype)  # (1024,V)
+        # view_graspness_merged[grasp_top_view_inds_ema] = 1.0
+        # # torch.index_select(view_graspness_merged, 0, nn_inds)  # (1024,V)
+        view_graspness_merged = torch.zeros((num_samples, V), device=device, dtype=view_graspness_src.dtype)
+        ar = torch.arange(num_samples, device=device)
+        view_graspness_merged[ar, grasp_top_view_inds_ema] = 1.0
+
 
         # ---- 5) teacher view로 최종 회전행렬 선택 (원래 방식) ----
         teacher_pred_view_ = grasp_top_view_inds_ema.view(-1, 1, 1, 1).expand(-1, 1, 3, 3)  # (1024,1,3,3)
@@ -1026,8 +1034,8 @@ def process_grasp_pseudo_label(end_points):
     #     score = batch_grasp_scores[0][batch_valid_mask[0]][i].detach().cpu().numpy()
     #     gripper = plot_gripper_pro_max(t, R, width, depth, score)
     #     grippers.append(gripper)
-    #     if i > 100:
-    #         break
+        # if i > 100:
+        #     break
     # scene_cloud = end_points['point_clouds_raw'][0].detach().cpu().numpy()
     # scene_cloud_o3d = o3d.geometry.PointCloud()
     # scene_cloud_o3d.points = o3d.utility.Vector3dVector(scene_cloud)

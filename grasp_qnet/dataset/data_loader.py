@@ -46,16 +46,16 @@ class GraspEvalDataset(Dataset):
             gripper_cloud = f['gripper_cloud'][()] 
             score = f['score'][()] 
             
-        if self.split == 'train':
-            obj_cloud = corrupt_dropout_global(obj_cloud, drop_rates=[0.01, 0.2])
-            obj_cloud = corrupt_dropout_local(obj_cloud, npoints=[10, 200])
-            obj_cloud = delete_random_knn_regions(obj_cloud, 10, 10)
-            obj_cloud = corrupt_add_global(obj_cloud, npoints=[10, 100])
-            obj_cloud = corrupt_add_local(obj_cloud, npoints=[10, 100])
-            obj_cloud = to_fixed_size_pointcloud(obj_cloud, 1024)
-            obj_cloud = corrupt_jitter(obj_cloud, sigmas = [0.00, 0.003])
-            obj_cloud = scale_and_translate(obj_cloud, scale=[0.97, 1.03], translate=[-0.005, 0.005])
-            obj_cloud = rotate(obj_cloud, angle=[-np.pi/60, np.pi/60])
+        # if self.split == 'train':
+        #     obj_cloud = corrupt_dropout_global(obj_cloud, drop_rates=[0.01, 0.2])
+        #     obj_cloud = corrupt_dropout_local(obj_cloud, npoints=[10, 200])
+        #     obj_cloud = delete_random_knn_regions(obj_cloud, 10, 10)
+        #     obj_cloud = corrupt_add_global(obj_cloud, npoints=[10, 100])
+        #     obj_cloud = corrupt_add_local(obj_cloud, npoints=[10, 100])
+        #     obj_cloud = to_fixed_size_pointcloud(obj_cloud, 1024)
+        #     obj_cloud = corrupt_jitter(obj_cloud, sigmas = [0.00, 0.003])
+        #     obj_cloud = scale_and_translate(obj_cloud, scale=[0.97, 1.03], translate=[-0.005, 0.005])
+        #     obj_cloud = rotate(obj_cloud, angle=[-np.pi/60, np.pi/60])
             # visualize = False
             
             # visualize 
@@ -86,6 +86,15 @@ class GraspEvalDataset(Dataset):
         obj_cloud = np.array(obj_cloud, dtype=np.float32)
         gripper_cloud = np.array(gripper_cloud, dtype=np.float32)
         score = np.round(score, 2)    
+        
+        # visualize
+        # pcd = o3d.geometry.PointCloud()
+        # pcd.points = o3d.utility.Vector3dVector(obj_cloud)
+        # pcd.paint_uniform_color([0.5, 0.5, 0.5])
+        # gripper_pcd = o3d.geometry.PointCloud()
+        # gripper_pcd.points = o3d.utility.Vector3dVector(gripper_cloud)
+        # gripper_pcd.paint_uniform_color([1, 0, 0])
+        # o3d.visualization.draw_geometries([pcd, gripper_pcd])
 
         # score >= 0.7: good, 0.3 <= score < 0.7: mid, score < 0.3: bad
         if self.return_score:

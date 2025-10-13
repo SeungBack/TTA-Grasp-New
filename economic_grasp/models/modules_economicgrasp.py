@@ -13,7 +13,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR + '/utils')
 from loss_utils import generate_grasp_views, batch_viewpoint_params_to_matrix
 
-from .adapter import LoRAAdapter
+from .adapter import ResidualLogitHead, ResidualFeat
 
 
 
@@ -23,12 +23,9 @@ class GraspableNet(nn.Module):
         self.in_dim = seed_feature_dim
         self.conv_graspable = nn.Conv1d(self.in_dim, 3, 1)
         self.use_lora = use_lora
-        if self.use_lora:
-            self.lora_grasp = LoRAAdapter(self.in_dim, self.in_dim)
 
     def forward(self, seed_features, end_points):
-        if self.use_lora:
-            seed_features = self.lora_grasp(seed_features)
+
         graspable_score = self.conv_graspable(seed_features)  # [B, 3, 20000]
         end_points['objectness_score'] = graspable_score[:, :2]
         end_points['graspness_score'] = graspable_score[:, 2]
@@ -46,14 +43,17 @@ class ViewNet(nn.Module):
         
         self.use_lora = use_lora
         if self.use_lora:
-            self.lora_view = LoRAAdapter(self.in_dim, self.in_dim)
+            self.lora_view = ResidualLogitHead(self.in_dim, self.num_view, 16)
 
     def forward(self, seed_features, end_points):
         B, _, num_seed = seed_features.size()
         res_features = F.relu(self.conv1(seed_features), inplace=True)
-        if self.use_lora:
-            res_features = self.lora_view(res_features)
+        # if self.use_lora:
+        #     res_features = self.lora_view(res_features)
         features = self.conv2(res_features)
+        if self.use_lora:
+            features = self.lora_view(res_features, features)
+        
         view_score = features.transpose(1, 2).contiguous()  # [B, 1024, 300]
         end_points['view_score'] = view_score
 
@@ -102,6 +102,8 @@ class Cylinder_Grouping_Global_Interaction(nn.Module):
         self.local_interaction_module = AttentionModule(dim=3 + 256, n_head=1, msa_dropout=0.05)
         self.mlps2 = pt_utils.SharedMLP(mlps2, bn=True)
         
+        self.use_lora = use_lora
+
 
     def forward(self, seed_xyz_graspable, seed_features_graspable, vp_rot):
         coords = seed_xyz_graspable.transpose(-1, -2).unsqueeze(-1).expand(-1, -1, -1, self.nsample)
@@ -113,9 +115,7 @@ class Cylinder_Grouping_Global_Interaction(nn.Module):
         new_features = self.mlps2(new_features)
         new_features = F.max_pool2d(new_features, kernel_size=[1, new_features.size(3)])
         new_features = new_features.squeeze(-1)
-        
-        # if self.use_lora:
-        #     new_features = self.lora_cy(new_features)
+
         
         return new_features
 
@@ -142,14 +142,23 @@ class Grasp_Head_Local_Interaction(nn.Module):
         self.use_lora = use_lora
         if self.use_lora:
             # self.lora_grasp = LoRAAdapter(256, 256)
+            self.lora_angle = ResidualLogitHead(64, num_angle + 1)
+            self.lora_depth = ResidualLogitHead(64, num_depth + 1)
+            self.lora_width = ResidualLogitHead(64, 1)
+            self.lora_score = ResidualLogitHead(64, 6)
             
-
+            # self.lora_angle = ResidualFeat(64, 64)
+            # self.lora_depth = ResidualFeat(64, 64)
+            # self.lora_width = ResidualFeat(64, 64)
+            # self.lora_score = ResidualFeat(64, 64)
+            
 
     def forward(self, vp_features, end_points):
         B, _, num_seed = vp_features.size()
 
-        if self.use_lora:
-            vp_features = self.lora_grasp(vp_features)
+        # if self.use_lora:
+        #     vp_features = self.lora_grasp(vp_features)
+
 
 
         angle_features = self.conv_angle_feature(vp_features)
@@ -157,6 +166,11 @@ class Grasp_Head_Local_Interaction(nn.Module):
         width_features = self.conv_width_feature(vp_features)
         score_features = self.conv_score_feature(vp_features)
 
+        # if self.use_lora:
+        #     angle_features = self.lora_angle(angle_features)
+        #     depth_features = self.lora_depth(depth_features)
+        #     width_features = self.lora_width(width_features)
+        #     score_features = self.lora_score(score_features)
 
         angle_features = angle_features.permute(0, 2, 1).contiguous().view(-1, 64).unsqueeze(1)
         depth_features = depth_features.permute(0, 2, 1).contiguous().view(-1, 64).unsqueeze(1)
@@ -171,22 +185,30 @@ class Grasp_Head_Local_Interaction(nn.Module):
         width_features = interaction_feature[:, 2, :].view(B, -1, 64).permute(0, 2, 1)
         score_features = interaction_feature[:, 3, :].view(B, -1, 64).permute(0, 2, 1)
 
-        angle_features = self.conv_angle(angle_features)
-        depth_features = self.conv_depth(depth_features)
-        width_features = self.conv_width(width_features)
-        score_features = self.conv_score(score_features)
+        # if self.use_lora:
+        #     angle_features = self.lora_angle(angle_features)
+        #     depth_features = self.lora_depth(depth_features)
+        #     width_features = self.lora_width(width_features)
+        #     score_features = self.lora_score(score_features)
+            
+        angle_pred = self.conv_angle(angle_features)
+        depth_pred = self.conv_depth(depth_features)
+        width_pred = self.conv_width(width_features)
+        score_pred = self.conv_score(score_features)
+        
         
         if self.use_lora:
-            angle_features = self.lora_angle(angle_features)
-            depth_features = self.lora_depth(depth_features)
-            width_features = self.lora_width(width_features)
-            score_features = self.lora_score(score_features)
+            angle_pred = self.lora_angle(angle_features, angle_pred)
+            depth_pred = self.lora_depth(depth_features, depth_pred)
+            width_pred = self.lora_width(width_features, width_pred)
+            score_pred = self.lora_score(score_features, score_pred)
+
 
         # split prediction
-        end_points['grasp_angle_pred'] = angle_features  # [B, 12, num_points]
-        end_points['grasp_depth_pred'] = depth_features  # [B, 4, num_points]
-        end_points['grasp_score_pred'] = score_features  # [B, 1, num_points]
-        end_points['grasp_width_pred'] = width_features  # [B, 6, num_points]
+        end_points['grasp_angle_pred'] = angle_pred  # [B, 12, num_points]
+        end_points['grasp_depth_pred'] = depth_pred  # [B, 4, num_points]
+        end_points['grasp_score_pred'] = score_pred  # [B, 1, num_points]
+        end_points['grasp_width_pred'] = width_pred  # [B, 6, num_points]
         return end_points
 
 

@@ -14,7 +14,7 @@ from label_generation import process_grasp_labels, process_grasp_pseudo_label, b
 from libs.pointnet2.pointnet2_utils import furthest_point_sample, gather_operation
 from arguments import cfgs
 
-from .adapter import LoRAAdapter
+from .adapter import ResidualFeat
 
 def load_economicgrasp(cfg, device):
     """Load and initialize model."""
@@ -49,13 +49,14 @@ class EconomicGrasp(nn.Module):
         
         self.use_lora = self.cfg.tta.lora.use_lora
         if self.use_lora:
-            self.lora_backbone = LoRAAdapter(self.seed_feature_dim, self.seed_feature_dim) #, self.cfg.tta.lora.r, self.cfg.tta.lora.alpha, self.cfg.tta.lora.dropout)
+            self.lora_backbone = ResidualFeat(self.seed_feature_dim, r=256) #, self.cfg.tta.lora.r, self.cfg.tta.lora.alpha, self.cfg.tta.lora.dropout)
+            
 
         # Backbone
         self.backbone = TDUnet(in_channels=3, out_channels=self.seed_feature_dim, D=3)
 
         # Objectness and graspness
-        self.graspable = GraspableNet(seed_feature_dim=self.seed_feature_dim)
+        self.graspable = GraspableNet(seed_feature_dim=self.seed_feature_dim, use_lora=self.use_lora)
 
         # View Selection
         self.view = ViewNet(self.num_view, seed_feature_dim=self.seed_feature_dim, 

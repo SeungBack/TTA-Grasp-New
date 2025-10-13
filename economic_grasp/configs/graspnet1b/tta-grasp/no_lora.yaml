@@ -17,8 +17,8 @@ model:
 tta:
   batch_size: 1
   method: "tta-grasp"  # Test Time Adaptation methods [none/ema/cotta/testadagrasp/tent/bn-1/alpha-bn]
-  ema_ratio: 0.9999  # EMA ratio
-  rst_ratio: 0.0  # Restore ratio
+  ema_ratio: 0.999  # EMA ratio
+  rst_ratio: 0.1  # Restore ratio
   aug_types: "none,hflip"  # Augmentation types for teacher ensemble
   use_student_aug: false
   lr: 1e-4 # Learning rate for TTA
@@ -41,7 +41,7 @@ tta:
     batch_size: 128
     min_points: 512
     grasp_q_thresh: 0.5 # Grasp score threshold
-    uncertainty_thresh: 0.10 # Uncertainty threshold
+    uncertainty_thresh: 0.05 # Uncertainty threshold
     uncertainty_n : 10
 
   kd:

@@ -318,7 +318,7 @@ def match_grasp_view_and_label(end_points):
     grasp_offsets = end_points['batch_grasp_offset'] # (B, Ns, V, A, D, 3)
     grasp_tolerance = end_points['batch_grasp_tolerance'] # (B, Ns, V, A, D)
 
-    end_points['batch_grasp_view_rot_ori'] = template_views_rot # for contrastive loss
+    # end_points['batch_grasp_view_rot_ori'] = template_views_rot # for contrastive loss
 
     B, Ns, V, A, D = grasp_labels.size()
     top_view_inds_ = top_view_inds.view(B, Ns, 1, 1, 1).expand(-1, -1, -1, 3, 3)

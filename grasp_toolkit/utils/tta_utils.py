@@ -215,25 +215,27 @@ def load_optimizer(optimizer_name, model, lr, backbone_lr_ratio=1.0, weight_deca
     
     if optimizer_name == "adamw":
 
-        if backbone_lr_ratio == -1.0:
-            # train only the backbone
-            backbone_params = [p for n, p in model.named_parameters() if 'backbone' in n and p.requires_grad]
-            return torch.optim.AdamW(backbone_params, lr=lr, weight_decay=weight_decay)
+        # if backbone_lr_ratio == -1.0:
+        #     # train only the backbone
+        #     backbone_params = [p for n, p in model.named_parameters() if 'backbone' in n and p.requires_grad]
+        #     return torch.optim.AdamW(backbone_params, lr=lr, weight_decay=weight_decay)
 
-        elif backbone_lr_ratio != 1.0:
-            # train backbone and head with different lr
-            backbone_params = [p for n, p in model.named_parameters() if 'backbone' in n and p.requires_grad]
-            non_backbone_params = [p for n, p in model.named_parameters() if 'backbone' not in n and p.requires_grad]
-            return torch.optim.AdamW([{'params': backbone_params, 'lr': lr * backbone_lr_ratio},
-                                    {'params': non_backbone_params, 'lr': lr}], weight_decay=weight_decay)
-        else:
-            # params = []
-            # for nm, m in model.named_modules():
-            #     if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.LayerNorm, nn.GroupNorm)):
-            #         for np, p in m.named_parameters():
-            #             if np in ['weight', 'bias']:  # weight is scale, bias is shift
-            #                 params.append(p)
-            return torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr, weight_decay=weight_decay)
+        # elif backbone_lr_ratio != 1.0:
+        #     # train backbone and head with different lr
+        #     backbone_params = [p for n, p in model.named_parameters() if 'backbone' in n and p.requires_grad]
+        #     non_backbone_params = [p for n, p in model.named_parameters() if 'backbone' not in n and p.requires_grad]
+        #     return torch.optim.AdamW([{'params': backbone_params, 'lr': lr * backbone_lr_ratio},
+        #                             {'params': non_backbone_params, 'lr': lr}], weight_decay=weight_decay)
+        # else:
+        #     # params = []
+        #     for n, p in model.named_parameters():
+        #         if not p.requires_grad:
+        #             print(f"Param {n} is frozen")
+        #     return torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr, weight_decay=weight_decay)
+        
+        params = [p for p in model.parameters() if p.requires_grad]
+        print(f"[LoRA] TTA optimizer with {sum(p.numel() for p in params):,} trainable params")
+        return torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
 
     else:
         raise ValueError(f'Optimizer {optimizer_name} not supported')

@@ -13,7 +13,7 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = True
 
 
-def jitter_point_cloud(cloud, sigmas=[0.001, 0.002]):
+def jitter_point_cloud(cloud, sigmas=[0.000, 0.002]):
     """ Randomly jitter points. jittering is per point.
         Input:
           BxNx3 tensor, original batch of point clouds
@@ -67,7 +67,7 @@ def augment_cloud(cloud, type='jitter'):
         rotated_clouds = []
         for i in range(B):
             rotated_clouds.append(torch.matmul(cloud[i], rot_tensors[i]))
-        return torch.stack(rotated_clouds), rot_matrices
+        return torch.stack(rotated_clouds), rot_tensors
     else:
         raise ValueError('Augmentation type not supported: %s' % type)
 

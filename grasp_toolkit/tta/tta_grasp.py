@@ -66,22 +66,31 @@ class TTA_Grasp_Base(TTA_Base):
         self.device = next(self.model.parameters()).device     
 
         self.model_states = [deepcopy(model.state_dict()) for model in self.model.modules()]
-        self.model.train()
+        self.model.eval()
         # disable grad to enable only what we need
         self.model.requires_grad_(False)
         for m in self.model.modules():
-            print(m)
-            if isinstance(m, (nn.BatchNorm2d)):
+            if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
                 m.requires_grad_(True)
                 # force use of batch stats in train and eval modes
                 m.track_running_stats = False
                 m.running_mean = None
                 m.running_var = None
-            elif isinstance(m, nn.BatchNorm1d):
-                m.train()   # always forcing train mode in bn1d will cause problems for single sample tta
-                m.requires_grad_(True)
             else:
-                m.requires_grad_(True) # enable grad for all modules
+                if self.cfg.tta.lora.use_lora:
+                    m.requires_grad_(False) # enable grad for all modules
+                else:
+                    m.requires_grad_(True) # enable grad for all modules
+        
+        lora_count = 0
+        for m in self.model.modules():
+            if hasattr(m, "lora_parameters"):
+                print(f"[LoRA] Enabled trainable params for {m}")
+                for p in m.lora_parameters:
+                    p.requires_grad = True
+                lora_count += 1        
+        print(f"[LoRA] Enabled trainable params for {lora_count}")
+        
         self.geval_net = load_grasp_qnet(self.cfg, self.device)
         if self.cfg.tta.geval_net.uncertainty_thresh > 0.0:
             self.geval_net.initialize_mc_dropout()
@@ -113,7 +122,7 @@ class TTA_Grasp_GraspNetBaseline(TTA_Grasp_Base):
     def configure_model(self):
         
         super().configure_model()
-
+        
         self.model_ema = self.load_graspnet(deepcopy(self.cfg), self.device)
         self.model_ema.cfg.tta.method = "none"
         self.model_ema.eval()
@@ -295,18 +304,21 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
         self.pred_decode = pred_decode
         self.pred_decode_raw = pred_decode_raw
         self.compute_tta_loss = get_tta_loss
-
+        
         self.model_ema = self.load_economicgrasp(deepcopy(self.cfg), self.device)
         self.model_ema.cfg.tta.method = "none" # to avoid processing labels for teacher EMA model
         self.model_ema.view.is_training = False
         self.model_ema.eval()
         self.model_ema.requires_grad_(False)
-
         for param in self.model_ema.parameters():
             param.detach_()
-        self.model_ema.to(self.device)
-        self.model_ema.eval()
 
+
+        self.geval_net = load_grasp_qnet(self.cfg, self.device)
+        if self.cfg.tta.geval_net.uncertainty_thresh > 0.0:
+            self.geval_net.initialize_mc_dropout()
+
+        # self.optimizer = load_optimizer(self.cfg.tta.optimizer, self.model, self.cfg.tta.lr, self.cfg.tta.backbone_lr_ratio)
 
     def forward_and_adapt(self, batch_data):
         
@@ -317,7 +329,6 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
         merged_grasp_angles_ema = [[] for _ in range(batch_size)]
         merged_mat_aug = [[] for _ in range(batch_size)]
         grasp_preds_ensembles = [[] for _ in range(batch_size)]
-        merged_grasp_q = [[] for _ in range(batch_size)]
         merged_view_scores_ema = [[] for _ in range(batch_size)]
         merged_graspness_scores_ema = [[] for _ in range(batch_size)]
         merged_objectness_scores_ema = [[] for _ in range(batch_size)]
@@ -335,16 +346,9 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
                 # [1, 1024, 17], [1, 1024]
                 grasp_preds_raw_ema, grasp_angles, view_scores, graspness_score, objectness_score = self.pred_decode_raw(end_points_ema)
                 
-                # get grasp preds
-                if aug_type == 'none':
-                    # grasp_preds = [x[objectness_masks[b]] for b, x in enumerate(grasp_preds_raw_ema)]
-                    grasp_preds = grasp_preds_raw_ema
-                    # features_ema.append(end_points_ema['seed_features'].clone()) # [B, 256, num_seed]
-                    
-
                 gg_array_filt = []
+                
                 for b in range(batch_size):
-
                     gg_array_ema = grasp_preds_raw_ema[b]
                     scene_cloud = batch_data['point_clouds_raw'][b]
                     scene_cloud = transform_point_cloud(scene_cloud, mat_aug)
@@ -357,7 +361,7 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
                         )
                         if len(obj_clouds) == 0: # no valid grasp predictions
                             print("No valid grasp predictions (crop_inner_cloud returned empty)")
-                            return grasp_preds, None
+                            return grasp_preds_raw_ema, None
                         
                         # run geval net in batch-wise manner
                         grasp_q = []
@@ -383,7 +387,7 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
 
                         if grasp_q.numel() == 0 or grasp_q.dim() == 0:
                             print("No valid grasp predictions (after grasp_q check)")
-                            return grasp_preds, None
+                            return grasp_preds_raw_ema, None
                         
                         if self.cfg.tta.geval_net.uncertainty_thresh > 0.0:
                             uncertainty = torch.cat(uncertainty, dim=0)
@@ -393,9 +397,6 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
                         else:
                             good_indices = torch.where(grasp_q >= self.cfg.tta.geval_net.grasp_q_thresh)[0]
                         gg_array_filt = gg_array_filt[good_indices]
-                        
-                        grasp_q = grasp_q[good_indices]
-                        merged_grasp_q[b].append(grasp_q.clone())
                         print(f"Grasp Q thresholding: {len(gg_array_filt)} valid grasps after filtering")
                         
                     else:
@@ -403,7 +404,7 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
                         
                     if gg_array_filt.shape[0] == 0:
                         print("No valid grasp predictions (after grasp_q check2)")
-                        return grasp_preds, None
+                        return grasp_preds_raw_ema, None
                     grasp_preds_ensembles[b].append(gg_array_filt.clone())
 
 
@@ -466,14 +467,22 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
         
         num_grasps = len(grasp_preds[0])
             
+        batch_data['point_clouds'], mat_aug_student = augment_cloud(batch_data['point_clouds'], type='jitter')
+        # batch_data['mat_aug_student'] = mat_aug_student
         if num_grasps > self.cfg.tta.min_grasps:
             # student model
             end_points = self.model(batch_data)
             end_points['loss_type'] = self.cfg.tta.loss_type
             loss, end_points = self.compute_tta_loss(end_points)
+            
+            reg_loss = 0
+            for m in self.model.modules():
+                if hasattr(m, "lora_parameters"):
+                    for p in m.lora_parameters:
+                        reg_loss += torch.sum(p**2)
+            loss = loss + 0.001 * reg_loss
                 
             loss.backward()
-            # clip gradients
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
             self.optimizer.step()
 
@@ -485,16 +494,6 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
         else:
             end_points = {}
             
-        # end_points = self.model_ema(batch_data)
-        # grasp_preds, _, _, _, _ = self.pred_decode_raw(end_points)
-        # self.model.eval()
-        # self.model.view.is_training = False
-        # end_points = self.model(batch_data)
-        # grasp_preds = self.pred_decode(end_points)
-        
-        # self.model.train()
-        # self.model.view.is_training = True
-
         return grasp_preds, end_points
     
     def stochastic_restore(self, model, model_states):
