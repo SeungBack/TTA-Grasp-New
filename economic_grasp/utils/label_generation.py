@@ -242,10 +242,10 @@ from utils.arguments import cfgs
 #         valid_view_mask[pid] = True
 #         valid_points_count = valid_points_count + torch.sum(valid_point_mask)
 #         valid_views_count = valid_views_count + torch.sum(valid_view_mask)
-#         # valid_score_mask = top_grasp_scores > 0.0
+#         valid_score_mask = top_grasp_scores > 0.0
 #         # print(torch.sum(valid_point_mask), torch.sum(valid_view_mask), torch.sum(valid_score_mask))
-#         # valid_mask = valid_score_mask  & valid_view_mask  & valid_point_mask
-#         valid_mask = valid_view_mask  & valid_point_mask
+#         valid_mask = valid_score_mask  & valid_view_mask  & valid_point_mask
+#         # valid_mask = valid_view_mask  & valid_point_mask
 
 #         # add to batch
 #         batch_grasp_points.append(grasp_points_merged)
@@ -532,7 +532,6 @@ from utils.arguments import cfgs
 #     batch_valid_mask = torch.stack(batch_valid_mask, 0)
 #     # [B (batch size), 1024 (scene points after sample)]
     
-#     print(batch_valid_mask.sum(), batch_valid_mask.shape, batch_valid_mask.dtype)
 #     # visualize the grasps
 #     import numpy as np
 #     import open3d as o3d
@@ -969,7 +968,7 @@ def process_grasp_pseudo_label(end_points):
 
         # 1024개로 인덱싱
         grasp_points_merged = torch.index_select(grasp_points_merged, 0, nn_inds)      # (1024,3)
-        # view_graspness_merged = torch.index_select(view_graspness_merged, 0, nn_inds)  # (1024,V)
+        view_graspness_merged = torch.index_select(view_graspness_merged, 0, nn_inds)  # (1024,V)
         grasp_rotations_merged = torch.index_select(grasp_rot_src.to(torch.int32), 0, nn_inds) # (1024,)
         grasp_depth_merged    = torch.index_select(grasp_depth_src.to(torch.int32),    0, nn_inds) # (1024,)
         grasp_scores_merged   = torch.index_select(grasp_scores_src, 0, nn_inds)       # (1024,)
@@ -980,9 +979,24 @@ def process_grasp_pseudo_label(end_points):
         # view_graspness_merged = torch.zeros((num_samples, V), device=device, dtype=view_graspness_src.dtype)  # (1024,V)
         # view_graspness_merged[grasp_top_view_inds_ema] = 1.0
         # # torch.index_select(view_graspness_merged, 0, nn_inds)  # (1024,V)
-        view_graspness_merged = torch.zeros((num_samples, V), device=device, dtype=view_graspness_src.dtype)
+        # view_graspness_merged = torch.zeros((num_samples, V), device=device, dtype=view_graspness_src.dtype)
+        
+        # make smooth the view_graspness with temperature then set the top view to 1
+        view_graspness_merged = torch.clamp(view_graspness_merged, min=1e-6)
+        view_graspness_merged = view_graspness_merged / 0.1
+        view_graspness_merged = torch.softmax(view_graspness_merged , dim=1)
         ar = torch.arange(num_samples, device=device)
         view_graspness_merged[ar, grasp_top_view_inds_ema] = 1.0
+        
+        # visualize view_graspness (x-axis: view index, y-axis: graspness)
+        # import matplotlib.pyplot as plt
+        # plt.imshow(view_graspness_merged.cpu().numpy(), cmap='hot', interpolation='nearest')
+        # plt.colorbar()
+        # plt.title('View Graspness Heatmap')
+        # plt.xlabel('View Index')
+        # plt.ylabel('Point Index')
+        # plt.show()
+        # plt.savefig('view_graspness_heatmap.png')
 
 
         # ---- 5) teacher view로 최종 회전행렬 선택 (원래 방식) ----
