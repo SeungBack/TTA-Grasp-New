@@ -18,12 +18,12 @@ class GraspEvalDataset(Dataset):
     def __init__(self, g1b_root, acronym_root, split='train', return_score=True, use_normal=False):
         # load acronym
         self.split = split
-        if split == 'train':
-            syn_h5_paths = glob.glob(acronym_root + '/*/*.h5')
-            print('Total number of syn h5 files for {}:'.format(split), len(syn_h5_paths))
-            syn_h5_paths = []
-        else:
-            syn_h5_paths = []
+        # if split == 'train':
+        #     syn_h5_paths = glob.glob(acronym_root + '/*/*.h5')
+        #     print('Total number of syn h5 files for {}:'.format(split), len(syn_h5_paths))
+        #     syn_h5_paths = []
+        # else:
+        syn_h5_paths = []
         # load g1b
         real_h5_paths = []
         for camera in ['kinect', 'realsense']:
@@ -46,16 +46,16 @@ class GraspEvalDataset(Dataset):
             gripper_cloud = f['gripper_cloud'][()] 
             score = f['score'][()] 
             
-        # if self.split == 'train':
-        #     obj_cloud = corrupt_dropout_global(obj_cloud, drop_rates=[0.01, 0.2])
-        #     obj_cloud = corrupt_dropout_local(obj_cloud, npoints=[10, 200])
-        #     obj_cloud = delete_random_knn_regions(obj_cloud, 10, 10)
-        #     obj_cloud = corrupt_add_global(obj_cloud, npoints=[10, 100])
-        #     obj_cloud = corrupt_add_local(obj_cloud, npoints=[10, 100])
-        #     obj_cloud = to_fixed_size_pointcloud(obj_cloud, 1024)
-        #     obj_cloud = corrupt_jitter(obj_cloud, sigmas = [0.00, 0.003])
-        #     obj_cloud = scale_and_translate(obj_cloud, scale=[0.97, 1.03], translate=[-0.005, 0.005])
-        #     obj_cloud = rotate(obj_cloud, angle=[-np.pi/60, np.pi/60])
+        if self.split == 'train':
+            obj_cloud = corrupt_dropout_global(obj_cloud, drop_rates=[0.01, 0.1])
+            obj_cloud = corrupt_dropout_local(obj_cloud, npoints=[10, 100])
+            obj_cloud = delete_random_knn_regions(obj_cloud, 10, 10)
+            obj_cloud = corrupt_add_global(obj_cloud, npoints=[10, 100])
+            obj_cloud = corrupt_add_local(obj_cloud, npoints=[10, 100])
+            obj_cloud = to_fixed_size_pointcloud(obj_cloud, 1024)
+            obj_cloud = corrupt_jitter(obj_cloud, sigmas = [0.00, 0.003])
+            # obj_cloud = scale_and_translate(obj_cloud, scale=[0.97, 1.03], translate=[-0.005, 0.005])
+            # obj_cloud = rotate(obj_cloud, angle=[-np.pi/60, np.pi/60])
             # visualize = False
             
             # visualize 

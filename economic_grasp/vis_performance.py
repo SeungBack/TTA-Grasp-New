@@ -10,12 +10,11 @@ split = 'test_similar_mixed_mini'
 # split = 'test_similar_mixed'
 # split = 'test_similar'
 
-num_pairs_to_process = 100  # Set to None to process all pairs
+num_pairs_to_process = 1000  # Set to None to process all pairs
 dump_folder = '/home/seung/Workspaces/grasp/TestAdaGrasp/economic_grasp/logs'
 root = '/home/seung/Datasets/GraspNet-1Billion'
 # Methods to compare (exactly two)
-# methods = ['graspnet1b/notta/realsense_similar_mini', 'graspnet1b/tta-grasp/lora_final_stochastic']
-methods = ['graspnet1b/tta-grasp/lora_dropout', 'graspnet1b/tta-grasp/lora_reg']
+methods = ['graspnet1b/notta/realsense_similar_mini', 'graspnet1b/tta-grasp/base_ema0.9999']
 
 method_names = ['notta', 'tta-grasp']  # Simplified names for display
 sigma = 5  # Sigma for smoothing

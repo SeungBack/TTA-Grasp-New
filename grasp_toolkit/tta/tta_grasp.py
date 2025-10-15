@@ -287,7 +287,7 @@ class TTA_Grasp_GraspNetBaseline(TTA_Grasp_Base):
 
                         
                                                
-class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
+class TTA_Grasp_EconomicGrasp(TTA_Base):
     
     def __init__(self, cfg, model):
         super().__init__(cfg, model)
@@ -295,9 +295,8 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
 
 
     def configure_model(self):
-        
-        super().configure_model()
-
+         # initialize ema model
+        self.device = next(self.model.parameters()).device     
         from economic_grasp.models.economicgrasp import load_economicgrasp, pred_decode_raw, pred_decode
         from economic_grasp.models.loss_economicgrasp import get_tta_loss 
         self.load_economicgrasp = load_economicgrasp
@@ -313,13 +312,36 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
         for param in self.model_ema.parameters():
             param.detach_()
 
-
+        self.model_states = [deepcopy(model.state_dict()) for model in self.model.modules()]
+        self.model.train()
+        # disable grad to enable only what we need
+        self.model.requires_grad_(False)
+        for m in self.model.modules():
+            if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+                m.requires_grad_(True)
+                # force use of batch stats in train and eval modes
+                m.track_running_stats = False
+                m.running_mean = None
+                m.running_var = None
+            else:
+                m.requires_grad_(True) # enable grad for all modules
+        
+        lora_count = 0
+        for m in self.model.modules():
+            if hasattr(m, "lora_parameters"):
+                print(f"[LoRA] Enabled trainable params for {m}")
+                for p in m.lora_parameters:
+                    p.requires_grad = True
+                lora_count += 1        
+        print(f"[LoRA] Enabled trainable params for {lora_count}")
+        
         self.geval_net = load_grasp_qnet(self.cfg, self.device)
         if self.cfg.tta.geval_net.uncertainty_thresh > 0.0:
             self.geval_net.initialize_mc_dropout()
 
-        # self.optimizer = load_optimizer(self.cfg.tta.optimizer, self.model, self.cfg.tta.lr, self.cfg.tta.backbone_lr_ratio)
-
+        self.optimizer = load_optimizer(self.cfg.tta.optimizer, self.model, self.cfg.tta.lr, self.cfg.tta.backbone_lr_ratio)
+        
+       
     def forward_and_adapt(self, batch_data):
         
         self.optimizer.zero_grad()
@@ -467,32 +489,34 @@ class TTA_Grasp_EconomicGrasp(TTA_Grasp_Base):
         
         num_grasps = len(grasp_preds[0])
             
-        batch_data['point_clouds'], mat_aug_student = augment_cloud(batch_data['point_clouds'], type='jitter')
+        # batch_data['point_clouds'], mat_aug_student = augment_cloud(batch_data['point_clouds'], type='jitter')
         # batch_data['mat_aug_student'] = mat_aug_student
-        if num_grasps > self.cfg.tta.min_grasps:
-            # student model
-            end_points = self.model(batch_data)
-            end_points['loss_type'] = self.cfg.tta.loss_type
-            loss, end_points = self.compute_tta_loss(end_points)
+        # if num_grasps > self.cfg.tta.min_grasps:
+        #     # student model
+        #     end_points = self.model(batch_data)
+        #     end_points['loss_type'] = self.cfg.tta.loss_type
+        #     loss, end_points = self.compute_tta_loss(end_points)
             
-            reg_loss = 0
-            for m in self.model.modules():
-                if hasattr(m, "lora_parameters"):
-                    for p in m.lora_parameters:
-                        reg_loss += torch.sum(p**2)
-            loss = loss + 0.001 * reg_loss
-                
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-            self.optimizer.step()
+        #     reg_loss = 0
+        #     for m in self.model.modules():
+        #         if hasattr(m, "lora_parameters"):
+        #             for p in m.lora_parameters:
+        #                 reg_loss += torch.sum(p**2)
+                        
+        #     loss = loss + 0.001 * reg_loss                
+        #     loss.backward()
+        #     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+            
+        #     self.optimizer.step()
 
-            # Update teacher model with EMA
-            self.model_ema = ema_update_model(self.model_ema, self.model, self.cfg.tta.ema_ratio, self.device)
-            # stochastic restore
-            if self.cfg.tta.rst_ratio > 0:
-                self.stochastic_restore(self.model, self.model_states)
-        else:
-            end_points = {}
+        #     # Update teacher model with EMA
+        #     self.model_ema = ema_update_model(self.model_ema, self.model, self.cfg.tta.ema_ratio, self.device)
+        #     # stochastic restore
+        #     if self.cfg.tta.rst_ratio > 0:
+        #         self.stochastic_restore(self.model, self.model_states)
+        # else:
+        end_points = {}
+            
             
         return grasp_preds, end_points
     

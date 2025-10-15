@@ -243,22 +243,22 @@ class TDUnet(ResNetBase):
         out = self.relu(out)
 
         out = ME.cat(out, out_b2p4)
-        out = self.block6(out)
+        out = self.block6(out) # [776, 192]
 
         # tensor_stride=2
         out = self.convtr6p4s2(out)
         out = self.bntr6(out)
-        out = self.relu(out)
+        out = self.relu(out) # [2501, 192]
 
         out = ME.cat(out, out_b1p2)
-        out = self.block7(out)
+        out = self.block7(out) # [2501, 192]
 
         # tensor_stride=1
         out = self.convtr7p2s2(out)
         out = self.bntr7(out)
-        out = self.relu(out)
+        out = self.relu(out) # [7299, 192]
 
         out = ME.cat(out, out_p1)
-        out = self.block8(out)
+        out = self.block8(out) # [7299, 192]
 
         return self.final(out)

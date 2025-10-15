@@ -47,28 +47,26 @@ class EconomicGrasp(nn.Module):
         self.voxel_size = voxel_size
         self.cfg = cfg
         
-        self.use_lora = self.cfg.tta.lora.use_lora
-        if self.use_lora:
-            self.lora_backbone = ResidualFeat(self.seed_feature_dim, r=256) #, self.cfg.tta.lora.r, self.cfg.tta.lora.alpha, self.cfg.tta.lora.dropout)
-            
+        self.film_enable = self.cfg.tta.film.enable
 
         # Backbone
         self.backbone = TDUnet(in_channels=3, out_channels=self.seed_feature_dim, D=3)
+        # print number of parameters
+        print("Number of parameters in EconomicGrasp: ", sum(p.numel() for p in self.backbone.parameters() if p.requires_grad)/1e6, "M")
 
         # Objectness and graspness
-        self.graspable = GraspableNet(seed_feature_dim=self.seed_feature_dim, use_lora=self.use_lora)
+        self.graspable = GraspableNet(seed_feature_dim=self.seed_feature_dim)
 
         # View Selection
         self.view = ViewNet(self.num_view, seed_feature_dim=self.seed_feature_dim, 
-                            is_training=self.is_training or (self.cfg and self.cfg.tta.method in ['tta-grasp', 'cotta']),
-                            use_lora=self.use_lora)
+                            is_training=self.is_training or (self.cfg and self.cfg.tta.method in ['tta-grasp', 'cotta']))
 
         # Cylinder Grouping
         self.cy_group = Cylinder_Grouping_Global_Interaction(nsample=16, cylinder_radius=cylinder_radius,
                                                             seed_feature_dim=self.seed_feature_dim)
 
         # Depth and Score searching
-        self.grasp_head = Grasp_Head_Local_Interaction(num_angle=self.num_angle, num_depth=self.num_depth, use_lora=self.use_lora)
+        self.grasp_head = Grasp_Head_Local_Interaction(num_angle=self.num_angle, num_depth=self.num_depth)
 
     def forward(self, end_points):
         seed_xyz = end_points['point_clouds']  # use all sampled point cloud, [B, point_num (15000)， 3]
@@ -91,9 +89,9 @@ class EconomicGrasp(nn.Module):
         # Minkowski Backbone
         seed_features = self.backbone(mink_input).F
         seed_features = seed_features[end_points['quantize2original']].view(B, point_num, -1).transpose(1, 2)
+
         # [B (batch size), 512 (feature dim), 20000 (points in a scene)]
-        if self.use_lora:
-            seed_features = self.lora_backbone(seed_features)
+            # seed_features = self.lora_backbone(seed_features)
 
 
         # Generate the masks of the objectness and the graspness
