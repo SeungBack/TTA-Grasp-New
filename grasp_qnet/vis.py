@@ -12,7 +12,7 @@ from dataset.data_loader import GraspEvalDataset
 
 # Import the models
 from models.pointnet_v2 import *
-from models.dgcnn import *
+from grasp_qnet.models.dgcnn_backup import *
 import open3d as o3d
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))

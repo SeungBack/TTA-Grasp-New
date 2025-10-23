@@ -47,7 +47,6 @@ class EconomicGrasp(nn.Module):
         self.voxel_size = voxel_size
         self.cfg = cfg
         
-        self.film_enable = self.cfg.tta.film.enable
 
         # Backbone
         self.backbone = TDUnet(in_channels=3, out_channels=self.seed_feature_dim, D=3)
@@ -67,6 +66,8 @@ class EconomicGrasp(nn.Module):
 
         # Depth and Score searching
         self.grasp_head = Grasp_Head_Local_Interaction(num_angle=self.num_angle, num_depth=self.num_depth)
+        
+
 
     def forward(self, end_points):
         seed_xyz = end_points['point_clouds']  # use all sampled point cloud, [B, point_num (15000)， 3]

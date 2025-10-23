@@ -8,16 +8,17 @@ import matplotlib.pyplot as plt
 # --- Configuration ---
 split = 'test_similar_mixed_mini'
 # split = 'test_similar_mixed'
-# split = 'test_similar'
+split = 'test_similar'
 
-num_pairs_to_process = 1000  # Set to None to process all pairs
+num_pairs_to_process = 256  # Set to None to process all pairs
 dump_folder = '/home/seung/Workspaces/grasp/TestAdaGrasp/economic_grasp/logs'
 root = '/home/seung/Datasets/GraspNet-1Billion'
 # Methods to compare (exactly two)
-methods = ['graspnet1b/notta/realsense_similar_mini', 'graspnet1b/tta-grasp/base_ema0.9999']
+methods = ['graspnet1b/notta/realsense_similar', 'graspnet1b/tta-grasp/no_lora_no_mixed']
+methods = ['graspnet1b/tta-grasp/no_lora_no_mixed_noupdate', 'graspnet1b/tta-grasp/no_lora_no_mixed']
 
 method_names = ['notta', 'tta-grasp']  # Simplified names for display
-sigma = 5  # Sigma for smoothing
+sigma = 3  # Sigma for smoothing
 
 
 # --- Data Loading ---
@@ -26,8 +27,11 @@ try:
     with open(os.path.join(root, 'splits', f'{split}.json'), 'r') as f:
         scene_id_img_id_pairs_all = json.load(f)
 except FileNotFoundError:
-    print(f"Error: Split file not found at {os.path.join(root, 'splits', f'{split}.json')}")
-    exit()
+        scene_id_img_id_pairs_all = []
+        for scene_id in range(130, 190):
+            for img_id in range(256):
+                scene_id_img_id_pairs_all.append((scene_id, img_id))
+            break
 
 # Select the pairs to process
 if num_pairs_to_process is not None:

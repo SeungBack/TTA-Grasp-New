@@ -48,11 +48,12 @@ CUDA_VISIBLE_DEVICES=0 python main_reg.py --net dgcnn --batch_size 128 --learnin
 CUDA_VISIBLE_DEVICES=0,1 python main_reg.py --net dgcnn --batch_size 256 --learning_rate 1e-4 --min_learning_rate 1e-6 --log_dir logs/final_basic_nodecay_do0.1_bn_bs256_0.0 --save_best_only --evals_per_epoch 2 --real_ratio=0.25 --dropout 0.1
 
 
-CUDA_VISIBLE_DEVICES=0,1 python main_reg.py --net dgcnn --batch_size 256 --learning_rate 1e-4 --min_learning_rate 1e-6 --log_dir logs/final_final_basic_nodecay_do0.1_bn_bs256_0.25 --save_best_only --evals_per_epoch 2 --real_ratio=0.25 --dropout 0.1
+CUDA_VISIBLE_DEVICES=0,1 python main_reg.py --net dgcnn --batch_size 256 --learning_rate 1e-4 --min_learning_rate 1e-6 --log_dir logs/g1b_acr --save_best_only --evals_per_epoch 2 --dropout 0.1 --max_epoch 20
 
-CUDA_VISIBLE_DEVICES=0,1 python main_reg.py --net dgcnn --batch_size 256 --learning_rate 1e-4 --min_learning_rate 1e-6 --log_dir logs/final_final_basic_nodecay_do0.3_bn_bs256_0.25 --save_best_only --evals_per_epoch 2 --real_ratio=0.25 --dropout 0.3
+CUDA_VISIBLE_DEVICES=2 python main_reg.py --net dgcnn --batch_size 128 --learning_rate 1e-4 --min_learning_rate 1e-6 --log_dir logs/g1b_acr --save_best_only --evals_per_epoch 2 --dropout 0.1 --max_epoch 20 
 
-CUDA_VISIBLE_DEVICES=0,1 python main_reg.py --net dgcnn --batch_size 256 --learning_rate 1e-4 --min_learning_rate 1e-6 --log_dir logs/real-final --save_best_only --evals_per_epoch 2 --real_ratio=0.25 --dropout 0.1
+
+
 
 ## test normal
 

@@ -204,43 +204,43 @@ class TDUnet(ResNetBase):
         self.relu = ME.MinkowskiReLU(inplace=True)
 
     def forward(self, x):
-        out = self.conv0p1s1(x)
+        out = self.conv0p1s1(x) # [7299, 3]
         out = self.bn0(out)
-        out_p1 = self.relu(out)
+        out_p1 = self.relu(out) # [7299, 32]
 
         out = self.conv1p1s2(out_p1)
         out = self.bn1(out)
         out = self.relu(out)
-        out_b1p2 = self.block1(out)
+        out_b1p2 = self.block1(out) # [2501, 32]
 
         out = self.conv2p2s2(out_b1p2)
         out = self.bn2(out)
         out = self.relu(out)
-        out_b2p4 = self.block2(out)
+        out_b2p4 = self.block2(out) # [776, 64]
 
         out = self.conv3p4s2(out_b2p4)
         out = self.bn3(out)
         out = self.relu(out)
-        out_b3p8 = self.block3(out)
+        out_b3p8 = self.block3(out) # [219, 128]
 
         # tensor_stride=16
         out = self.conv4p8s2(out_b3p8)
         out = self.bn4(out)
         out = self.relu(out)
-        out = self.block4(out)
+        out = self.block4(out) # [65, 256]
 
         # tensor_stride=8
         out = self.convtr4p16s2(out)
         out = self.bntr4(out)
-        out = self.relu(out)
+        out = self.relu(out) # [219, 192]
 
         out = ME.cat(out, out_b3p8)
-        out = self.block5(out)
+        out = self.block5(out) # [219, 192]
 
         # tensor_stride=4
         out = self.convtr5p8s2(out)
         out = self.bntr5(out)
-        out = self.relu(out)
+        out = self.relu(out) # [776, 192]
 
         out = ME.cat(out, out_b2p4)
         out = self.block6(out) # [776, 192]

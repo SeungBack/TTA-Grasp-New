@@ -45,7 +45,7 @@ class GraspNetDataset(Dataset):
         elif 'mixed' in split or 'mini' in split:
             with open(os.path.join(root, 'splits', split+'.json'), 'r') as f:
                 self.scene_id_img_id_pairs = json.load(f)
-            # self.scene_id_img_id_pairs = self.scene_id_img_id_pairs[:100]
+            # self.scene_id_img_id_pairs = self.scene_id_img_id_pairs[:256]
             self.sceneIds = [x[0] for x in np.unique(self.scene_id_img_id_pairs, axis=0)]
             
         else:
@@ -94,6 +94,7 @@ class GraspNetDataset(Dataset):
                 for img_num in range(256):
                     x = x.split('_')[-1]
                     self.scene_id_img_id_pairs.append((int(x), int(img_num)))
+                break
             for x in tqdm(self.sceneIds, desc='Loading the scene data and its labels...'):
                 for img_num in range(256):
                     self.colorpath.append(os.path.join(root, 'scenes', x, camera, 'rgb', str(img_num).zfill(4) + '.png'))
@@ -106,6 +107,7 @@ class GraspNetDataset(Dataset):
                     
                 if self.load_label:
                     self.grasp_labels[x.strip()] = os.path.join(self.root, 'economic_grasp_label_300views', x + '_labels.npz')
+                break
         self.return_raw_cloud = return_raw_cloud
 
     def scene_list(self):

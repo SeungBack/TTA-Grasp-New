@@ -13,7 +13,7 @@ from dataset.data_loader import GraspEvalDataset
 
 # Import the models
 from models.pointnet_v2 import *
-from models.dgcnn import *
+from grasp_qnet.models.dgcnn_backup import *
 from sklearn.metrics import ndcg_score
 from models.edgegrasp import *
 import time

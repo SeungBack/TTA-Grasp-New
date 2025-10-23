@@ -18,12 +18,11 @@ class GraspEvalDataset(Dataset):
     def __init__(self, g1b_root, acronym_root, split='train', return_score=True, use_normal=False):
         # load acronym
         self.split = split
-        # if split == 'train':
-        #     syn_h5_paths = glob.glob(acronym_root + '/*/*.h5')
-        #     print('Total number of syn h5 files for {}:'.format(split), len(syn_h5_paths))
-        #     syn_h5_paths = []
-        # else:
-        syn_h5_paths = []
+        if split == 'train':
+            syn_h5_paths = glob.glob(acronym_root + '/*/*.h5')
+            print('Total number of syn h5 files for {}:'.format(split), len(syn_h5_paths))
+        else:
+            syn_h5_paths = []
         # load g1b
         real_h5_paths = []
         for camera in ['kinect', 'realsense']:
@@ -57,16 +56,13 @@ class GraspEvalDataset(Dataset):
             # obj_cloud = scale_and_translate(obj_cloud, scale=[0.97, 1.03], translate=[-0.005, 0.005])
             # obj_cloud = rotate(obj_cloud, angle=[-np.pi/60, np.pi/60])
             # visualize = False
+            gripper_cloud = to_fixed_size_pointcloud(gripper_cloud, 64)
             
             # visualize 
+            # print(obj_cloud.shape, gripper_cloud.shape, score)
             # pcd = o3d.geometry.PointCloud()
             # pcd.points = o3d.utility.Vector3dVector(obj_cloud)
             # pcd.paint_uniform_color([0.5, 0.5, 0.5])
-            
-
-            # # pcd_ = o3d.geometry.PointCloud()
-            # # pcd_.points = o3d.utility.Vector3dVector(obj_cloud)
-            # # pcd_.paint_uniform_color([0.0, 0.5, 1.0])
             
             # gripper_pcd = o3d.geometry.PointCloud()
             # gripper_pcd.points = o3d.utility.Vector3dVector(gripper_cloud)

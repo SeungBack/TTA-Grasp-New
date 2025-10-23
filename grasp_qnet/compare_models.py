@@ -6,7 +6,7 @@ from tqdm import tqdm
 import time
 
 from models.pointnet_v2 import PointNet2GraspQNet
-from models.dgcnn import DGCNNGraspQNet, ImprovedDGCNNGraspQNet
+from grasp_qnet.models.dgcnn_backup import DGCNNGraspQNet, ImprovedDGCNNGraspQNet
 from models.pct import PCTGraspQNet
 from models.pointtransformer import PointTransformerGraspQNet
 from models.pointmlp import PointMLPGraspQNet

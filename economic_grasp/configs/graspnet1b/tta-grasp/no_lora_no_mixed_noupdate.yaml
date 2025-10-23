@@ -3,12 +3,12 @@ base_cfg: "configs/base.yaml"
 tta_dataset:
   name: "graspnet1b"
   camera: "realsense"  # Camera split [realsense/kinect]
-  split: "test_similar_mixed_mini"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+  split: "test_similar"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
 
 eval_dataset:
   name: "graspnet1b"
   camera: "realsense"  # Camera split [realsense/kinect]
-  split: "test_similar_mixed_mini"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
+  split: "test_similar"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
 
 # Model settings
 model:
@@ -27,8 +27,12 @@ tta:
   min_grasps: 0
   loss_type: "graspness,view"
 
-  film:
-    enable: true
+  lora:
+    use_lora: False
+    type: conv
+    r: 16
+    alpha: 16
+    dropout: 0.0
 
   geval_net:
     model: "dgcnn"
@@ -40,3 +44,5 @@ tta:
     uncertainty_thresh: 0.05 # Uncertainty threshold
     uncertainty_n : 10
 
+  kd:
+    weight: 0.0

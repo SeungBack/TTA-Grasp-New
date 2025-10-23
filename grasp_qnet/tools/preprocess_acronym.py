@@ -262,9 +262,9 @@ def preprocess_data(grasp_path, acronym_path, out_root):
             target = np.matmul(target, grasp_poses)
 
             ## crop the object in gripper closing area
-            height = 0.04
-            depth_base = 0.04
-            depth_outer = 0.04
+            height = 0.06
+            depth_base = 0.02
+            depth_outer = 0.05
             mask1 = ((target[:,:,2]>-height/2) & (target[:,:,2]<height/2))
             mask2 = ((target[:,:,0]>-depth_base - depth_outer) & (target[:,:,0]<grasp_depths[:,np.newaxis] + depth_outer))
             mask4 = (target[:,:,1]<-grasp_widths[:,np.newaxis]/2)
@@ -273,12 +273,12 @@ def preprocess_data(grasp_path, acronym_path, out_root):
             obj_cloud_inner = obj_pcd[inner_mask[0]]
 
             num_cloud_points = 1024
-            num_gripper_points = 128
+            num_gripper_points = 64
 
             # random sample n_points
             if obj_cloud_inner.shape[0] >= num_cloud_points:
                 obj_cloud_inner = obj_cloud_inner[np.random.choice(obj_cloud_inner.shape[0], num_cloud_points, replace=False)]
-            elif obj_cloud_inner.shape[0] < 128:
+            elif obj_cloud_inner.shape[0] < 512:
                 print('Not enough points: ', obj_cloud_inner.shape[0])
                 continue
             else:
@@ -323,7 +323,7 @@ def safe_process_func(grasp_path, acronym_path, out_root):
         return None
 
 if __name__ == "__main__":
-    acronym_path = '/home/seung/Workspaces/Datasets/ACRONYM'
+    acronym_path = '/home/seung/Datasets/ACRONYM'
     
     grasp_dir_path = os.path.join(acronym_path, 'grasps')
     grasp_paths = glob.glob(grasp_dir_path + '/*.h5')
