@@ -8,10 +8,13 @@ from graspnetAPI import GraspNet
 from graspnetAPI.utils.utils import generate_views, get_model_grasps, plot_gripper_pro_max, transform_points
 from graspnetAPI.utils.rotation import viewpoint_params_to_matrix
 from graspnetAPI.grasp import GraspGroup, Grasp
-import argparse
 from tqdm import tqdm
+from multiprocessing import Pool, cpu_count
+import glob
+from collections import defaultdict
+import os
 
-obj_ids = {
+obj_ids = { # 
     'train': [0, 2, 5, 7, 8, 9, 11, 14, 15, 17, 18, 20, 21, 22, 26, 27, 29, 30, 34, 36, 37, 38, 40, 41, 43, 44, 46, 48, 51, 52, 56, 57, 58, 60, 61, 62, 63, 66, 69, 70],
     'test_seen': [0, 2, 5, 7, 8, 9, 11, 14, 17, 18, 20, 21, 22, 26, 27, 29, 30, 38, 41, 48, 51, 52, 58, 60, 61, 62, 63, 66],
     'test_similar': [1, 3, 4, 6, 10, 12, 13, 16, 19, 23, 25, 35, 39, 42, 50, 53, 54, 59, 64, 65, 67, 68],
@@ -106,7 +109,16 @@ def generate_gripper_points(grasp):
     
     return points
 
-def process(out_dir, obj_id, target_fric = 1.0, max_width = 0.14, num_cloud_points=2048):
+def process_with_retry(args, max_retries=100):
+    for attempt in range(max_retries):
+        try:
+            return process(args)
+        except Exception as e:
+            print(f"Error processing {args} on attempt {attempt + 1}: {e}")
+    return False
+
+def process(args):
+    out_dir, obj_id, target_fric, max_width, num_cloud_points, dataset_root = args
 
     plyfile = os.path.join(dataset_root, 'models', '%03d'%obj_id, 'nontextured.ply')
     model = o3d.io.read_point_cloud(plyfile)
@@ -190,36 +202,101 @@ def process(out_dir, obj_id, target_fric = 1.0, max_width = 0.14, num_cloud_poin
     save_path = os.path.join(out_dir, f'{obj_id}_{score:.1f}_{p}_{v}_{a}_{d}.h5')
     if os.path.exists(save_path):
         return False
-    
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    with h5py.File(save_path, 'w') as f:
-        f.create_dataset('obj_cloud', data=obj_cloud_inner)
-        f.create_dataset('gripper_cloud', data=gripper_cloud)
-        f.create_dataset('score', data=score)
-        f.create_dataset('obj_id', data=obj_id)
-    return True
     
+    try:
+        with h5py.File(save_path, 'w') as f:
+            f.create_dataset('obj_cloud', data=obj_cloud_inner)
+            f.create_dataset('gripper_cloud', data=gripper_cloud)
+            f.create_dataset('score', data=score)
+            f.create_dataset('obj_id', data=obj_id)
+        return True
+    except Exception as e:
+        print(f"Error saving file {save_path}: {e}")
+        return False
+    
+
 
     
 
 
 
 dataset_root = '/home/seung/Datasets/GraspNet-1Billion'
-split = 'test_similar'
-out_root = os.path.join(dataset_root, 'grasp_qnet_final', split)
+dataset_root = '/data/Grasp/GraspNet-1Billion'
+split = 'train'
+num_samples_per_fric = 2000
+
+split = 'test_seen'
 num_samples_per_fric = 100
+
+out_root = os.path.join(dataset_root, 'grasp_qnet_final', split)
 max_attempt = 100
-
 num_points = 4096
-target_frics = np.linspace(0.1, 1.0, 10)
-print(target_frics)
+target_scores = np.linspace(0.1, 1.0, 10)
 
+obj_ids = obj_ids[split]
 
-for obj_id in obj_ids[split]:
-    print('Processing object %03d'%obj_id)
-    for target_fric in target_frics:
-        for _ in tqdm(range(num_samples_per_fric)):
-            for attempt in range(max_attempt):
-                success = process(out_root, obj_id, target_fric=target_fric, max_width=0.14, num_cloud_points=num_points)
-                if success:
-                    break
+# for obj_id in obj_ids:
+#     print('Processing object %03d'%obj_id)
+#     for target_fric in target_frics:
+#         for _ in tqdm(range(num_samples_per_fric)):
+#             for attempt in range(max_attempt):
+#                 success = process(out_root, obj_id, target_fric=target_fric, max_width=0.14, num_cloud_points=num_points)
+#                 if success:
+#                     break
+
+# 이미 존재하는 파일을 확인하고, 없는 작업만 수행하도록 수정
+existing_files = glob.glob(os.path.join(out_root, '*.h5'))
+
+# Parse existing files once into a lookup dictionary
+existing_counts = defaultdict(int)
+for f in existing_files:
+    basename = os.path.basename(f)
+    # Extract obj_id and target_fric from filename
+    # 실제 형식: '{obj_id}_{score:.1f}_{p}_{v}_{a}_{d}.h5'
+    parts = basename.split('_')
+    if len(parts) >= 2:
+        try:
+            obj_id_str = parts[0]
+            score_str = parts[1]
+            
+            # obj_id를 정수로 변환 (원래 obj_ids가 정수 리스트이므로)
+            obj_id_int = int(obj_id_str)
+            
+            # score를 float으로 변환 후 문자열로 (동일한 형식 유지)
+            score_float = float(score_str)
+            
+            key = (obj_id_int, f"{score_float:.1f}")
+            existing_counts[key] += 1
+        except (ValueError, IndexError):
+            continue
+
+print(f"Total existing files: {len(existing_files)}")
+print(f"Unique (obj_id, score) combinations found: {len(existing_counts)}")
+print(f"Sample existing_counts: {dict(list(existing_counts.items())[:10])}")
+
+tasks = []
+for obj_id in tqdm(obj_ids):
+    for target_score in target_scores:
+        # obj_id는 정수 그대로, target_score은 문자열로
+        key = (obj_id, f"{target_score:.1f}")
+        existing_count = existing_counts.get(key, 0)
+        
+        if existing_count >= num_samples_per_fric:
+            print(f"Skipping obj_id {obj_id} with target_score {target_score:.1f}, already has {existing_count} files.")
+            continue
+        
+        needed = num_samples_per_fric - existing_count
+        print(f"obj_id {obj_id}, target_score {target_score:.1f}: existing {existing_count}, need {needed} more")
+        target_fric = 1.1 - target_score  # Convert score back to friction
+        for _ in range(needed):
+            tasks.append((out_root, obj_id, target_fric, 0.14, num_points, dataset_root))
+
+print(f"\nTotal tasks to process: {len(tasks)}")
+        
+
+# 멀티프로세싱 실행
+with Pool(processes=5) as pool:
+    results = list(tqdm(pool.imap(process_with_retry, tasks), total=len(tasks)))
+    
+print(f"Successfully generated {sum(results)} samples")

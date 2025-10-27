@@ -15,25 +15,24 @@ import multiprocessing
 
 
 class GraspEvalDataset(Dataset):
-    def __init__(self, g1b_root, acronym_root, split='train', return_score=True, use_normal=False):
+    def __init__(self, g1b_root, acronym_root, split='train', return_score=True):
         # load acronym
         self.split = split
         if split == 'train':
             syn_h5_paths = glob.glob(acronym_root + '/*/*.h5')
-            print('Total number of syn h5 files for {}:'.format(split), len(syn_h5_paths))
+            # print('Total number of syn h5 files for {}:'.format(split), len(syn_h5_paths))
         else:
             syn_h5_paths = []
+        syn_h5_paths = []
+
         # load g1b
         real_h5_paths = []
-        for camera in ['kinect', 'realsense']:
-            real_h5_paths += sorted(glob.glob(os.path.join(g1b_root, camera, split) + '/*.h5'))
-            # if split != 'train':
-                # real_h5_paths = real_h5_paths[:5000]
+        # for camera in ['kinect', 'realsense']:
+        real_h5_paths += sorted(glob.glob(os.path.join(g1b_root, split) + '/*.h5'))
         print('Total number of real h5 files for {}:'.format(split), len(real_h5_paths))
         self.h5_paths = syn_h5_paths + real_h5_paths
         
         self.return_score = return_score
-        self.use_normal = use_normal
 
     def __len__(self):
         return len(self.h5_paths)
@@ -51,12 +50,9 @@ class GraspEvalDataset(Dataset):
             obj_cloud = delete_random_knn_regions(obj_cloud, 10, 10)
             obj_cloud = corrupt_add_global(obj_cloud, npoints=[10, 100])
             obj_cloud = corrupt_add_local(obj_cloud, npoints=[10, 100])
-            obj_cloud = to_fixed_size_pointcloud(obj_cloud, 1024)
-            obj_cloud = corrupt_jitter(obj_cloud, sigmas = [0.00, 0.003])
-            # obj_cloud = scale_and_translate(obj_cloud, scale=[0.97, 1.03], translate=[-0.005, 0.005])
-            # obj_cloud = rotate(obj_cloud, angle=[-np.pi/60, np.pi/60])
-            # visualize = False
-            gripper_cloud = to_fixed_size_pointcloud(gripper_cloud, 64)
+            obj_cloud = corrupt_jitter(obj_cloud, sigmas = [0.00, 0.005])
+            obj_cloud = scale_and_translate(obj_cloud, scale=[0.97, 1.03], translate=[-0.005, 0.005])
+            obj_cloud = rotate(obj_cloud, angle=[-np.pi/60, np.pi/60])
             
             # visualize 
             # print(obj_cloud.shape, gripper_cloud.shape, score)
@@ -78,7 +74,9 @@ class GraspEvalDataset(Dataset):
             #     obj_cloud = np.concatenate((obj_cloud, normals), axis=1)
                 
           
-            
+        obj_cloud = to_fixed_size_pointcloud(obj_cloud, 1024)
+        gripper_cloud = to_fixed_size_pointcloud(gripper_cloud, 64)
+
         obj_cloud = np.array(obj_cloud, dtype=np.float32)
         gripper_cloud = np.array(gripper_cloud, dtype=np.float32)
         score = np.round(score, 2)    
@@ -559,7 +557,7 @@ if __name__ == '__main__':
     acronym_root = '/home/seung/Workspaces/Datasets/ACRONYM/grasp_qnet'
     g1b_root = '/home/seung/Workspaces/Datasets/GraspNet-1Billion/grasp_qnet'
     split = 'train'
-    dataset = GraspEvalDataset(g1b_root, acronym_root, split, use_normal=True)
+    dataset = GraspEvalDataset(g1b_root, acronym_root, split)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4)
     for i, data in enumerate(dataloader):
         obj_cloud, gripper_cloud, score = data
