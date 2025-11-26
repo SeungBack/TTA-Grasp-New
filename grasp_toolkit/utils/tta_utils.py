@@ -164,7 +164,7 @@ def generate_gripper_points(grasp):
     return points
 
 
-def crop_inner_cloud(gg_array, scene_cloud, min_points=512, num_cloud_points=1024, num_gripper_points=64, nms_on=False):
+def crop_inner_cloud(gg_array, scene_cloud, min_points=512, num_cloud_points=1024, max_grasp_num=512):
     """_summary_
 
     Args:
@@ -174,11 +174,14 @@ def crop_inner_cloud(gg_array, scene_cloud, min_points=512, num_cloud_points=102
         _type_: _description_
     """
     # ## 1. first apply grasp NMS 
-    if nms_on:
-        gg = GraspGroup()
-        gg.grasp_group_array = gg_array.cpu().numpy()
-        gg = gg.nms(0.03, 30.0/180*np.pi)
-        gg_array = torch.from_numpy(np.array(gg.grasp_group_array, copy=True)).float().cuda()
+    # if nms_on:
+    # gg = gg.nms(0.03, 30.0/180*np.pi)
+    
+    # gg = GraspGroup()
+    # gg.grasp_group_array = gg_array.cpu().numpy()
+    # gg = gg.sort_by_score()
+    # gg = gg[:max_grasp_num]
+    # gg_array = torch.from_numpy(np.array(gg.grasp_group_array, copy=True)).float().cuda()
     
     # 2. detect collision (GPU for speed)
     mfcdetector = ModelFreeCollisionDetectorGPU(scene_cloud, voxel_size=0.01)
@@ -247,16 +250,13 @@ def crop_inner_cloud(gg_array, scene_cloud, min_points=512, num_cloud_points=102
     # o3d.visualization.draw_geometries([obj_clouds_o3d, gripper_clouds_o3d])
     return obj_clouds, gripper_clouds, gg_array
 
-def load_optimizer(optimizer_name, model, lr, weight_decay=0.0):
+def load_optimizer(optimizer_name, model, lr, momentum=0.9):
     
-    if optimizer_name == "adamw":
-
-
+    if optimizer_name == "sgd":
         for n, p in model.named_parameters():
             if not p.requires_grad:
                 print(f"Param {n} is frozen")
-        return torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr, weight_decay=weight_decay)
-    
+        return torch.optim.SGD([p for p in model.parameters() if p.requires_grad], lr=lr, momentum=momentum)
 
     else:
         raise ValueError(f'Optimizer {optimizer_name} not supported')

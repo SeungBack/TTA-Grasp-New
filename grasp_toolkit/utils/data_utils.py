@@ -47,27 +47,19 @@ def augment_cloud(cloud, type='jitter'):
     elif type == 'hflip': # flip along YZ plane
         flip_mat = torch.tensor([[-1, 0, 0], [0, 1, 0], [0, 0, 1]], device=cloud.device).float()
         # Handle batched point clouds
-        return torch.matmul(cloud, flip_mat.T), flip_mat
+        return torch.matmul(cloud, flip_mat), flip_mat
     elif type == 'vflip': # flip along XZ plane
         flip_mat = torch.tensor([[1, 0, 0], [0, -1, 0], [0, 0, 1]], device=cloud.device).float()
         # Handle batched point clouds
-        return torch.matmul(cloud, flip_mat.T), flip_mat
+        return torch.matmul(cloud, flip_mat), flip_mat
     elif type == 'rotate':
         B = cloud.shape[0]
         # Create batch of rotation matrices
-        rot_matrices = []
-        for i in range(B):
-            # -30 to 30 degree rotation
-            rot_angle = (np.random.random()*np.pi/3) - np.pi/6 # -30 ~ +30 degree
-            c, s = np.cos(rot_angle), np.sin(rot_angle)
-            rot_mat = torch.tensor([[1, 0, 0], [0, c, -s], [0, s, c]], device=cloud.device).float()
-            rot_matrices.append(rot_mat)
-        rot_tensors = torch.stack(rot_matrices)
-        # Apply rotation to each point cloud in the batch
-        rotated_clouds = []
-        for i in range(B):
-            rotated_clouds.append(torch.matmul(cloud[i], rot_tensors[i]))
-        return torch.stack(rotated_clouds), rot_tensors
+        # -30 to 30 degree rotation
+        rot_angle = (np.random.random()*np.pi/3) - np.pi/6 # -30 ~ +30 degree
+        c, s = np.cos(rot_angle), np.sin(rot_angle)
+        rot_mat = torch.tensor([[1, 0, 0], [0, c, -s], [0, s, c]], device=cloud.device).float()
+        return torch.matmul(cloud, rot_mat), rot_mat
     else:
         raise ValueError('Augmentation type not supported: %s' % type)
 

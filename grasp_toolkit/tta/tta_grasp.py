@@ -121,7 +121,11 @@ class TTA_Grasp_GraspNetBaseline(TTA_Base):
                         
                         # prepare object and gripper clouds
                         obj_clouds, gripper_clouds, gg_array_filt = crop_inner_cloud(
-                            gg_array_ema.clone(), scene_cloud, self.cfg.tta.geval_net.min_points,
+                            gg_array_ema.clone(), 
+                            scene_cloud, 
+                            self.cfg.tta.geval_net.min_points,
+                            self.cfg.tta.geval_net.max_grasp_num
+                            
                         )
                         if len(obj_clouds) == 0: # no valid grasp predictions
                             print("No valid grasp predictions (crop_inner_cloud returned empty)")
@@ -261,17 +265,31 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
             param.detach_()
 
         self.model_states = [deepcopy(model.state_dict()) for model in self.model.modules()]
-        self.model.eval()
+        self.model.train()
         # disable grad to enable only what we need
+        self.model.requires_grad_(False)
+        # enable all trainable
         for m in self.model.modules():
-            if not isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+            if isinstance(m, nn.BatchNorm2d):
+                m.requires_grad_(True)
+                # force use of batch stats in train and eval modes
+                m.track_running_stats = False
+                m.running_mean = None
+                m.running_var = None
+            elif isinstance(m, nn.BatchNorm1d):
+                m.train()   # always forcing train mode in bn1d will cause problems for single sample tta
+                m.requires_grad_(True)
+            # elif isinstance(m, nn.Dropout):
+                # m.eval()  # Dropout은 eval로
+            else:
                 m.requires_grad_(True)
         
         self.geval_net = load_grasp_qnet(self.cfg, self.device)
         if self.cfg.tta.geval_net.uncertainty_thresh > 0.0:
             self.geval_net.initialize_mc_dropout()
 
-        self.optimizer = load_optimizer(self.cfg.tta.optimizer, self.model, self.cfg.tta.lr)
+        self.optimizer = load_optimizer(
+            self.cfg.tta.optimizer, self.model, self.cfg.tta.lr, self.cfg.tta.optimizer_momentum)
 
 
     def forward_and_adapt(self, batch_data):
@@ -288,6 +306,7 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
         merged_objectness_scores_ema = [[] for _ in range(batch_size)]
         
         # teacher EMA model
+        # Iterate through augmentations
         with torch.no_grad():
             for aug_type in self.cfg.tta.aug_types.split(','):
                 # Forward pass with ema model
@@ -298,18 +317,19 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
                     )
                 # [1, 1024, 17], [1, 1024]
                 grasp_preds_raw_ema, grasp_angles, view_scores, graspness_score, objectness_score = self.pred_decode_raw(end_points_ema)
-                
                 gg_array_filt = []
+                
+                # Iterate through batch
                 for b in range(batch_size):
-                    gg_array_ema = grasp_preds_raw_ema[b]
+                    gg_array_ema = grasp_preds_raw_ema[b].clone()
+                        
                     scene_cloud = batch_data['point_clouds_raw'][b]
                     scene_cloud = transform_point_cloud(scene_cloud, mat_aug)
 
                     if self.cfg.tta.geval_net.grasp_q_thresh > 0:
-                        
                         # prepare object and gripper clouds
                         obj_clouds, gripper_clouds, gg_array_filt = crop_inner_cloud(
-                            gg_array_ema.clone(), scene_cloud, self.cfg.tta.geval_net.min_points,
+                            gg_array_ema, scene_cloud, self.cfg.tta.geval_net.min_points,
                         )
                         if len(obj_clouds) == 0: # no valid grasp predictions
                             print("No valid grasp predictions (crop_inner_cloud returned empty)")
@@ -345,7 +365,7 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
                             uncertainty = torch.cat(uncertainty, dim=0)
                             good_indices = torch.where(
                                 (uncertainty < self.cfg.tta.geval_net.uncertainty_thresh) & \
-                                 (grasp_q >= self.cfg.tta.geval_net.grasp_q_thresh))[0]
+                                    (grasp_q >= self.cfg.tta.geval_net.grasp_q_thresh))[0]
                         else:
                             good_indices = torch.where(grasp_q >= self.cfg.tta.geval_net.grasp_q_thresh)[0]
                         gg_array_filt = gg_array_filt[good_indices]
@@ -357,26 +377,35 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
                     if gg_array_filt.shape[0] == 0:
                         print("No valid grasp predictions (after grasp_q check2)")
                         return grasp_preds_raw_ema, None
+                    
+                    # transform gg_array_filt back to original coordinate []
+                    # if mat_aug is not None:
+                    #     gg = GraspGroup()
+                    #     gg.grasp_group_array = gg_array_filt.cpu().numpy()
+                    #     gg.transform(np.linalg.inv(mat_aug.cpu().numpy()))
+                    #     gg_array_filt = torch.tensor(gg.grasp_group_array, device=gg_array
+                    
+                    
                     grasp_preds_ensembles[b].append(gg_array_filt.clone())
 
 
                     # print(f'gg_array_filt shape: {gg_array_filt.shape}, gg_array_ema shape: {gg_array_ema.shape}')
                     # #visualize gg_array_filt
-                    # import open3d as o3d
-                    # _gg = GraspGroup()
-                    # _gg.grasp_group_array = gg_array_filt.cpu().numpy()
-                    # _gg = _gg.to_open3d_geometry_list()
-                    # # colorize grippers
-                    # for g in _gg:
-                    #     g.paint_uniform_color([1, 0, 0])
-                    # _gg_ori = GraspGroup()
-                    # _gg_ori.grasp_group_array = gg_array_ema.cpu().numpy()
-                    # _gg_ori = _gg_ori.to_open3d_geometry_list()
-                    # for g in _gg_ori:
-                    #     g.paint_uniform_color([0, 1, 0])
-                    # cloud_o3d = o3d.geometry.PointCloud()
-                    # cloud_o3d.points = o3d.utility.Vector3dVector(scene_cloud.cpu().numpy())
-                    # o3d.visualization.draw_geometries([cloud_o3d] + _gg )
+                    import open3d as o3d
+                    _gg = GraspGroup()
+                    _gg.grasp_group_array = gg_array_filt.cpu().numpy()
+                    _gg = _gg.to_open3d_geometry_list()
+                    # colorize grippers
+                    for g in _gg:
+                        g.paint_uniform_color([1, 0, 0])
+                    _gg_ori = GraspGroup()
+                    _gg_ori.grasp_group_array = gg_array_ema.cpu().numpy()
+                    _gg_ori = _gg_ori.to_open3d_geometry_list()
+                    for g in _gg_ori:
+                        g.paint_uniform_color([0, 1, 0])
+                    cloud_o3d = o3d.geometry.PointCloud()
+                    cloud_o3d.points = o3d.utility.Vector3dVector(scene_cloud.cpu().numpy())
+                    o3d.visualization.draw_geometries([cloud_o3d] + _gg )
 
                     # After filtering, we need to handle EMA and analytical samples differently
                     idx_in_ema = torch.tensor(get_index_A_to_B(gg_array_filt.clone(), gg_array_ema.clone()), device=gg_array_ema.device)
@@ -386,13 +415,10 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
                     merged_grasp_top_view_inds_ema[b].append(end_points_ema['grasp_top_view_inds'][b][idx_in_ema])
                     merged_grasp_angles_ema[b].append(grasp_angles[b][idx_in_ema])
                     merged_view_scores_ema[b].append(view_scores[b][idx_in_ema])
-                    # valid_mask = torch.zeros_like(merged_grasp_angle_inds_ema[b])
-                    # valid_mask[idx_in_ema] = 1
-                    # Update merged_mat_aug for all filtered grasps
                     merged_mat_aug[b].extend([mat_aug] * gg_array_filt.shape[0])
                     merged_graspness_scores_ema[b].append(graspness_score)
                     merged_objectness_scores_ema[b].append(objectness_score)
-                    
+                        
 
             # merge all the grasp predictions from different augmentations
             for b in range(len(merged_grasp_preds_ema)):
@@ -401,11 +427,12 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
                 merged_grasp_angles_ema[b] = torch.cat(merged_grasp_angles_ema[b], dim=0)
                 merged_view_scores_ema[b] = torch.cat(merged_view_scores_ema[b], dim=0)
                 # average graspness scores
+                # !TODO: check this is correct
                 merged_graspness_scores_ema[b] = torch.stack(merged_graspness_scores_ema[b], dim=0).mean(dim=0)
                 merged_objectness_scores_ema[b] = torch.stack(merged_objectness_scores_ema[b], dim=0).mean(dim=0)
             merged_graspness_scores_ema = torch.cat(merged_graspness_scores_ema, dim=0)
             merged_objectness_scores_ema = torch.cat(merged_objectness_scores_ema, dim=0)
-                             
+                                
             batch_data['batch_grasp_preds_ema'] = merged_grasp_preds_ema # list of (Np', 17)
             batch_data['batch_grasp_top_view_inds_ema'] = merged_grasp_top_view_inds_ema # list of (Np',)
             batch_data['batch_grasp_angles_ema'] = merged_grasp_angles_ema # list of (Np', 1)
@@ -413,7 +440,6 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
             batch_data['batch_view_scores_ema'] = merged_view_scores_ema # list of (Np', 1)
             batch_data['graspness_label'] = merged_graspness_scores_ema # list of (Np', 1)
             batch_data['objectness_label'] = torch.argmax(merged_objectness_scores_ema, dim=1) # list of (Np', 2)
-            
         
             
         # merge all the grasp predictions from different ensembles
@@ -421,13 +447,23 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
         for b in range(len(grasp_preds_ensembles)):
             for i in range(len(grasp_preds_ensembles[b])):
                 gg = GraspGroup(grasp_preds_ensembles[b][i].cpu().numpy())
-                H = np.eye(4)
-                H[:3, :3] = get_aug_matrix(self.cfg.tta.aug_types.split(',')[i])
-                gg = gg.transform(H)
                 grasp_preds[b] = np.concatenate([grasp_preds[b], gg.grasp_group_array], axis=0)
         
+        
+        # visualize
+        # cloud = batch_data['point_clouds_raw'][0].cpu().numpy()
+        # import open3d as o3d
+        # cloud_o3d = o3d.geometry.PointCloud()
+        # cloud_o3d.points = o3d.utility.Vector3dVector(cloud)
+        # _gg = GraspGroup()
+        # _gg.grasp_group_array = grasp_preds[0]
+        # _gg = _gg.to_open3d_geometry_list()
+        # print(f'Visualizing {len(_gg)} grasps')
+        # for g in _gg:
+        #     g.paint_uniform_color([1, 0, 0])
+        # o3d.visualization.draw_geometries([cloud_o3d] + _gg )
+        
         num_grasps = len(grasp_preds[0])
-            
         
         if num_grasps > self.cfg.tta.min_grasps:
             # student model
@@ -446,11 +482,8 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
                 self.stochastic_restore(self.model, self.model_states)
         else:
             end_points = {}
-            
-        # inference again with updated models to get final predictions
-        # end_points = self.model_ema(batch_data)
-        # grasp_preds = self.pred_decode(end_points)
-            
+        end_points = {}
+
         return grasp_preds, end_points
     
     def stochastic_restore(self, model, model_states):

@@ -24,4 +24,4 @@ graspclutter6d:
 
 seed: 7  # Random seed
 mode: "infereval" # Mode [infereval / infer / eval]
-num_workers: 4  # Number of workers used in evaluation
+num_workers: 8  # Number of workers used in evaluation

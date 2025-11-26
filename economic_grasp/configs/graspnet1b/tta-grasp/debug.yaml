@@ -19,9 +19,10 @@ tta:
   method: "tta-grasp"  # Test Time Adaptation methods [none/ema/cotta/testadagrasp/tent/bn-1/alpha-bn]
   ema_ratio: 0.99  # EMA ratio
   rst_ratio: 0.1  # Restore ratio
-  aug_types: "none,hflip"  # Augmentation types for teacher ensemble
-  lr: 1e-4 # Learning rate for TTA
-  optimizer: "adamw"
+  aug_types: "hflip"  # Augmentation types for teacher ensemble
+  lr: 1e-5 # Learning rate for TTA
+  optimizer: "sgd"
+  optimizer_momentum: 0.99
   min_grasps: 0
   loss_type: "graspness,view,objectness"
 
