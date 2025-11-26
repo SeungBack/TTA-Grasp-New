@@ -58,59 +58,7 @@ def load_grasp_qnet(cfg, device):
 
 
 
-
-class TTA_Grasp_Base(TTA_Base):
-    
-    def configure_model(self):
-         # initialize ema model
-        self.device = next(self.model.parameters()).device     
-
-        self.model_states = [deepcopy(model.state_dict()) for model in self.model.modules()]
-        self.model.eval()
-        # disable grad to enable only what we need
-        self.model.requires_grad_(False)
-        for m in self.model.modules():
-            if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
-                m.requires_grad_(True)
-                # force use of batch stats in train and eval modes
-                m.track_running_stats = False
-                m.running_mean = None
-                m.running_var = None
-            else:
-                if self.cfg.tta.lora.use_lora:
-                    m.requires_grad_(False) # enable grad for all modules
-                else:
-                    m.requires_grad_(True) # enable grad for all modules
-        
-        lora_count = 0
-        for m in self.model.modules():
-            if hasattr(m, "lora_parameters"):
-                print(f"[LoRA] Enabled trainable params for {m}")
-                for p in m.lora_parameters:
-                    p.requires_grad = True
-                lora_count += 1        
-        print(f"[LoRA] Enabled trainable params for {lora_count}")
-        
-        self.geval_net = load_grasp_qnet(self.cfg, self.device)
-        if self.cfg.tta.geval_net.uncertainty_thresh > 0.0:
-            self.geval_net.initialize_mc_dropout()
-
-        self.optimizer = load_optimizer(self.cfg.tta.optimizer, self.model, self.cfg.tta.lr, self.cfg.tta.backbone_lr_ratio)
-        
-    
-    def stochastic_restore(self, model, model_states):
-        for nm, m in model.named_modules():
-            for npp, p in m.named_parameters():
-                if npp in ['weight', 'bias'] and p.requires_grad:
-                    mask = (torch.rand(p.shape) < self.cfg.tta.rst_ratio).float().cuda()
-                    with torch.no_grad():
-                        p.data = model_states[0][f"{nm}.{npp}"] * mask + p * (1.-mask)
-    
-    def forward_and_adapt(self, batch_data):
-        pass
-
-
-class TTA_Grasp_GraspNetBaseline(TTA_Grasp_Base):
+class TTA_Grasp_GraspNetBaseline(TTA_Base):
     def __init__(self, cfg, model):
         super().__init__(cfg, model)
         
@@ -313,36 +261,19 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
             param.detach_()
 
         self.model_states = [deepcopy(model.state_dict()) for model in self.model.modules()]
-        self.model.train()
+        self.model.eval()
         # disable grad to enable only what we need
-        self.model.requires_grad_(False)
         for m in self.model.modules():
-            if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+            if not isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
                 m.requires_grad_(True)
-                # force use of batch stats in train and eval modes
-                m.track_running_stats = False
-                m.running_mean = None
-                m.running_var = None
-            else:
-                m.requires_grad_(True) # enable grad for all modules
-        
-        
-        lora_count = 0
-        for m in self.model.modules():
-            if hasattr(m, "lora_parameters"):
-                print(f"[LoRA] Enabled trainable params for {m}")
-                for p in m.lora_parameters:
-                    p.requires_grad = True
-                lora_count += 1        
-        print(f"[LoRA] Enabled trainable params for {lora_count}")
         
         self.geval_net = load_grasp_qnet(self.cfg, self.device)
         if self.cfg.tta.geval_net.uncertainty_thresh > 0.0:
             self.geval_net.initialize_mc_dropout()
 
-        self.optimizer = load_optimizer(self.cfg.tta.optimizer, self.model, self.cfg.tta.lr, self.cfg.tta.backbone_lr_ratio)
-        
-       
+        self.optimizer = load_optimizer(self.cfg.tta.optimizer, self.model, self.cfg.tta.lr)
+
+
     def forward_and_adapt(self, batch_data):
         
         self.optimizer.zero_grad()
@@ -361,7 +292,6 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
             for aug_type in self.cfg.tta.aug_types.split(','):
                 # Forward pass with ema model
                 pc_aug, mat_aug = augment_cloud(batch_data['point_clouds'], type=aug_type)
-                
                 end_points_ema = self.model_ema({
                     'point_clouds': pc_aug, 
                     'coordinates_for_voxel': pc_aug / self.cfg.model.voxel_size}
@@ -370,7 +300,6 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
                 grasp_preds_raw_ema, grasp_angles, view_scores, graspness_score, objectness_score = self.pred_decode_raw(end_points_ema)
                 
                 gg_array_filt = []
-                
                 for b in range(batch_size):
                     gg_array_ema = grasp_preds_raw_ema[b]
                     scene_cloud = batch_data['point_clouds_raw'][b]
@@ -436,9 +365,18 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
                     # import open3d as o3d
                     # _gg = GraspGroup()
                     # _gg.grasp_group_array = gg_array_filt.cpu().numpy()
+                    # _gg = _gg.to_open3d_geometry_list()
+                    # # colorize grippers
+                    # for g in _gg:
+                    #     g.paint_uniform_color([1, 0, 0])
+                    # _gg_ori = GraspGroup()
+                    # _gg_ori.grasp_group_array = gg_array_ema.cpu().numpy()
+                    # _gg_ori = _gg_ori.to_open3d_geometry_list()
+                    # for g in _gg_ori:
+                    #     g.paint_uniform_color([0, 1, 0])
                     # cloud_o3d = o3d.geometry.PointCloud()
                     # cloud_o3d.points = o3d.utility.Vector3dVector(scene_cloud.cpu().numpy())
-                    # o3d.visualization.draw_geometries([cloud_o3d] + _gg.to_open3d_geometry_list())
+                    # o3d.visualization.draw_geometries([cloud_o3d] + _gg )
 
                     # After filtering, we need to handle EMA and analytical samples differently
                     idx_in_ema = torch.tensor(get_index_A_to_B(gg_array_filt.clone(), gg_array_ema.clone()), device=gg_array_ema.device)
@@ -490,8 +428,6 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
         
         num_grasps = len(grasp_preds[0])
             
-        # batch_data['point_clouds'], mat_aug_student = augment_cloud(batch_data['point_clouds'], type='jitter')
-        # batch_data['mat_aug_student'] = mat_aug_student
         
         if num_grasps > self.cfg.tta.min_grasps:
             # student model
@@ -499,16 +435,8 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
             end_points['loss_type'] = self.cfg.tta.loss_type
             loss, end_points = self.compute_tta_loss(end_points)
             
-            reg_loss = 0
-            for m in self.model.modules():
-                if hasattr(m, "lora_parameters"):
-                    for p in m.lora_parameters:
-                        reg_loss += torch.sum(p**2)
-                        
-            loss = loss + 0.001 * reg_loss                
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-            
             self.optimizer.step()
 
             # Update teacher model with EMA
@@ -519,6 +447,9 @@ class TTA_Grasp_EconomicGrasp(TTA_Base):
         else:
             end_points = {}
             
+        # inference again with updated models to get final predictions
+        # end_points = self.model_ema(batch_data)
+        # grasp_preds = self.pred_decode(end_points)
             
         return grasp_preds, end_points
     

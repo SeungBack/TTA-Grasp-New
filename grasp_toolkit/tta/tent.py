@@ -48,7 +48,7 @@ class TENT(TTA_Base):
             elif isinstance(m, nn.BatchNorm1d):
                 m.train()   # always forcing train mode in bn1d will cause problems for single sample tta
                 m.requires_grad_(True)
-        self.optimizer = load_optimizer(self.cfg.tta.optimizer, self.model, self.cfg.tta.lr, self.cfg.tta.backbone_lr_ratio)
+        self.optimizer = load_optimizer(self.cfg.tta.optimizer, self.model, self.cfg.tta.lr)
 
 
     @torch.enable_grad()

@@ -1,0 +1,6 @@
+scene: "packed"
+object_set: "packed/test" 
+num_objects: 5
+num_rounds: 100
+seeds: [0, 1, 2, 3, 4]
+num_views: 1

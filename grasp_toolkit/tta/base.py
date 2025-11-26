@@ -38,48 +38,49 @@ class TTA_Base(nn.Module):
 
     def forward(self, x):
         
-        # single sample test-time adaption with a sliding window 
-        if x[list(x.keys())[0]].shape[0] == 1 and self.cfg.tta.method in ['bn-1', 'bn-adapt', 'bn-ema', 'tent']:
+        #!TODO: Check sliding window is helpful or not
+        # # single sample test-time adaption with a sliding window 
+        # if x[list(x.keys())[0]].shape[0] == 1 and self.cfg.tta.method in ['bn-1', 'bn-adapt', 'bn-ema', 'tent']:
             
-            # Initialize the input buffer if it is None or not filled yet
-            if self.input_buffer is None:
-                self.input_buffer = {k: v for k, v in x.items()}
-                self.change_mode_of_batchnorm1d(self.model, to_train_mode=False)
-            elif list(self.input_buffer.values())[0].shape[0] < self.window_length:
-                self.input_buffer = {
-                    key: torch.cat([self.input_buffer[key], x[key]], dim=0) 
-                    for key in x.keys()
-                }
-                self.change_mode_of_batchnorm1d(self.model, to_train_mode=True)
-            else:
-                for key in x.keys():
-                    self.input_buffer[key][self.pointer.long()] = x[key].squeeze(0)
+        #     # Initialize the input buffer if it is None or not filled yet
+        #     if self.input_buffer is None:
+        #         self.input_buffer = {k: v for k, v in x.items()}
+        #         self.change_mode_of_batchnorm1d(self.model, to_train_mode=False)
+        #     elif list(self.input_buffer.values())[0].shape[0] < self.window_length:
+        #         self.input_buffer = {
+        #             key: torch.cat([self.input_buffer[key], x[key]], dim=0) 
+        #             for key in x.keys()
+        #         }
+        #         self.change_mode_of_batchnorm1d(self.model, to_train_mode=True)
+        #     else:
+        #         for key in x.keys():
+        #             self.input_buffer[key][self.pointer.long()] = x[key].squeeze(0)
             
-            if self.pointer == (self.window_length - 1):
-                grasp_preds, end_points = self.forward_and_adapt(copy.deepcopy(self.input_buffer))
-            else:
-                grasp_preds, end_points = self.forward_sliding_window(copy.deepcopy(self.input_buffer))
-            end_points = {k: v[self.pointer.long()] for k, v in end_points.items() if v is not None}
-            grasp_preds = grasp_preds[self.pointer.long()].unsqueeze(0)
+        #     if self.pointer == (self.window_length - 1):
+        #         grasp_preds, end_points = self.forward_and_adapt(copy.deepcopy(self.input_buffer))
+        #     else:
+        #         grasp_preds, end_points = self.forward_sliding_window(copy.deepcopy(self.input_buffer))
+        #     end_points = {k: v[self.pointer.long()] for k, v in end_points.items() if v is not None}
+        #     grasp_preds = grasp_preds[self.pointer.long()].unsqueeze(0)
             
-            self.pointer += 1
-            self.pointer %= self.window_length
+        #     self.pointer += 1
+        #     self.pointer %= self.window_length
             
-            # from graspnetAPI import GraspGroup
-            # import open3d as o3d
-            # i = 
-            # if isinstance(grasp_preds[i], torch.Tensor):
-            #     gg = GraspGroup(grasp_preds[i].detach().cpu().numpy())
-            # else:
-            #     gg = GraspGroup(grasp_preds[i])
-            # cloud = self.input_buffer['point_clouds'][i].detach().cpu().numpy()
-            # pcd = o3d.geometry.PointCloud()
-            # pcd.points = o3d.utility.Vector3dVector(cloud)
-            # o3d.visualization.draw_geometries([pcd] + gg.to_open3d_geometry_list())
+        #     # from graspnetAPI import GraspGroup
+        #     # import open3d as o3d
+        #     # i = 
+        #     # if isinstance(grasp_preds[i], torch.Tensor):
+        #     #     gg = GraspGroup(grasp_preds[i].detach().cpu().numpy())
+        #     # else:
+        #     #     gg = GraspGroup(grasp_preds[i])
+        #     # cloud = self.input_buffer['point_clouds'][i].detach().cpu().numpy()
+        #     # pcd = o3d.geometry.PointCloud()
+        #     # pcd.points = o3d.utility.Vector3dVector(cloud)
+        #     # o3d.visualization.draw_geometries([pcd] + gg.to_open3d_geometry_list())
             
             
-        else:
-            grasp_preds, end_points = self.forward_and_adapt(x)
+        # else:
+        grasp_preds, end_points = self.forward_and_adapt(x)
 
         return grasp_preds, end_points
 

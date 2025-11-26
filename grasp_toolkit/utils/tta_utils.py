@@ -126,8 +126,45 @@ def get_index_A_to_B(gg_A, gg_B):
     
     return index
 
+def generate_gripper_points(grasp):
+    """Ultra-fast version with minimal operations"""
+    width = grasp.width
+    depth = grasp.depth
+    
+    # Pre-calculate constants
+    tail_length = 0.04
+    depth_base = 0.02
+    half_width = width * 0.5
+    
+    # Pre-allocate with float32 for better cache performance
+    points = np.zeros((64, 3), dtype=np.float32)
+    
+    # Pre-calculate step sizes (faster than np.linspace)
+    finger_step = (depth + depth_base) / 19.0  # 20 points = 19 intervals
+    connector_step = width / 13.0  # 14 points = 13 intervals
+    tail_step = tail_length / 9.0  # 10 points = 9 intervals
+    
+    # Manual loop unrolling for fingers (most points)
+    for i in range(20):
+        x_val = -depth_base + i * finger_step
+        points[i, 0] = x_val        # Left finger x
+        points[i, 1] = -half_width  # Left finger y
+        points[i+20, 0] = x_val     # Right finger x  
+        points[i+20, 1] = half_width # Right finger y
+    
+    # Connector line
+    for i in range(14):
+        points[i+40, 0] = -depth_base
+        points[i+40, 1] = -half_width + i * connector_step
+    
+    # Tail
+    for i in range(10):
+        points[i+54, 0] = -depth_base - i * tail_step
+    
+    return points
 
-def crop_inner_cloud(gg_array, scene_cloud, min_points=512, nms_on=False, num_cloud_points=1024, num_gripper_points=128, max_grasp_num=512):
+
+def crop_inner_cloud(gg_array, scene_cloud, min_points=512, num_cloud_points=1024, num_gripper_points=64, nms_on=False):
     """_summary_
 
     Args:
@@ -142,10 +179,6 @@ def crop_inner_cloud(gg_array, scene_cloud, min_points=512, nms_on=False, num_cl
         gg.grasp_group_array = gg_array.cpu().numpy()
         gg = gg.nms(0.03, 30.0/180*np.pi)
         gg_array = torch.from_numpy(np.array(gg.grasp_group_array, copy=True)).float().cuda()
-    # sort
-    # gg_array = gg_array[torch.argsort(gg_array[:, 0], descending=True)][:max_grasp_num]
-    # # use only top 512
-    # gg_array = gg_array[:512]
     
     # 2. detect collision (GPU for speed)
     mfcdetector = ModelFreeCollisionDetectorGPU(scene_cloud, voxel_size=0.01)
@@ -153,9 +186,10 @@ def crop_inner_cloud(gg_array, scene_cloud, min_points=512, nms_on=False, num_cl
     gg_array = gg_array[~collision_mask]
 
     # 3. crop point clouds inside of gripper
-    height = 0.04
-    depth_base = 0.04
+    height = 0.06
+    depth_base = 0.02
     depth_outer = 0.04
+    width_offset = 0.02
     # Parse grasp parameters
     grasp_points = gg_array[:, 13:16]  # (N, 3)
     grasp_poses = gg_array[:, 4:13].reshape(-1, 3, 3)  # (N, 3, 3)
@@ -168,11 +202,13 @@ def crop_inner_cloud(gg_array, scene_cloud, min_points=512, nms_on=False, num_cl
     target = scene_cloud_expanded - grasp_points.unsqueeze(1)  # (N, M, 3)
     target = torch.bmm(target, grasp_poses.transpose(1, 2))  # (N, M, 3)
     # Crop the object in gripper closing area
-    mask1 = (target[:, :, 2] > -height / 2) & (target[:, :, 2] < height / 2)
-    mask2 = (target[:, :, 0] > -depth_base) & (target[:, :, 0] < grasp_depths.unsqueeze(1) + depth_outer)
-    mask4 = target[:, :, 1] < -grasp_widths.unsqueeze(1) / 2
-    mask6 = target[:, :, 1] > grasp_widths.unsqueeze(1) / 2
-    inner_mask = mask1 & mask2 & (~mask4) & (~mask6)  # (N, M)
+    # gripper approach direction:
+    mask1 = (target[:, :, 0] > -depth_base) & (target[:, :, 0] < grasp_depths.unsqueeze(1) + depth_outer)
+    # griper width direction:
+    mask2 = (target[:, :, 1] < (grasp_widths.unsqueeze(1) / 2 + width_offset)) & (target[:, :, 1] > -(grasp_widths.unsqueeze(1) / 2 + width_offset))
+    # height direction:
+    mask3 = (target[:, :, 2] > -height / 2) & (target[:, :, 2] < height / 2)
+    inner_mask = mask1 & mask2 & mask3  # (N, M)
     valid_indices = torch.where(inner_mask.sum(dim=1) > min_points)[0] 
     inner_mask = inner_mask[valid_indices]
     grasp_points = grasp_points[valid_indices]
@@ -192,9 +228,9 @@ def crop_inner_cloud(gg_array, scene_cloud, min_points=512, nms_on=False, num_cl
     se3_batch = torch.inverse(se3_batch)  # Batch inverse
     for i in range(grasp_points.shape[0]):
         se3 = se3_batch[i]
-        gripper_pcd = g_list[i].to_open3d_geometry().sample_points_uniformly(num_gripper_points)
-        gripper_pcd.transform(se3.cpu().numpy())
-        gripper_clouds.append(torch.from_numpy(np.asarray(gripper_pcd.points)).float().cuda())
+        gripper_pcd = generate_gripper_points(g_list[i])
+        # gripper_pcd.transform(se3.cpu().numpy())
+        gripper_clouds.append(torch.from_numpy(gripper_pcd).float().cuda())
         obj_cloud_inner = sample_point_cloud(scene_cloud[inner_mask[i]], num_cloud_points)
         obj_cloud_inner = torch.matmul(obj_cloud_inner, se3[:3, :3].T) + se3[:3, 3]
         obj_clouds.append(obj_cloud_inner)
@@ -211,31 +247,16 @@ def crop_inner_cloud(gg_array, scene_cloud, min_points=512, nms_on=False, num_cl
     # o3d.visualization.draw_geometries([obj_clouds_o3d, gripper_clouds_o3d])
     return obj_clouds, gripper_clouds, gg_array
 
-def load_optimizer(optimizer_name, model, lr, backbone_lr_ratio=1.0, weight_decay=0.0):
+def load_optimizer(optimizer_name, model, lr, weight_decay=0.0):
     
     if optimizer_name == "adamw":
 
-        # if backbone_lr_ratio == -1.0:
-        #     # train only the backbone
-        #     backbone_params = [p for n, p in model.named_parameters() if 'backbone' in n and p.requires_grad]
-        #     return torch.optim.AdamW(backbone_params, lr=lr, weight_decay=weight_decay)
 
-        # elif backbone_lr_ratio != 1.0:
-        #     # train backbone and head with different lr
-        #     backbone_params = [p for n, p in model.named_parameters() if 'backbone' in n and p.requires_grad]
-        #     non_backbone_params = [p for n, p in model.named_parameters() if 'backbone' not in n and p.requires_grad]
-        #     return torch.optim.AdamW([{'params': backbone_params, 'lr': lr * backbone_lr_ratio},
-        #                             {'params': non_backbone_params, 'lr': lr}], weight_decay=weight_decay)
-        # else:
-        #     # params = []
-        #     for n, p in model.named_parameters():
-        #         if not p.requires_grad:
-        #             print(f"Param {n} is frozen")
-        #     return torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr, weight_decay=weight_decay)
-        
-        params = [p for p in model.parameters() if p.requires_grad]
-        print(f"[LoRA] TTA optimizer with {sum(p.numel() for p in params):,} trainable params")
-        return torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
+        for n, p in model.named_parameters():
+            if not p.requires_grad:
+                print(f"Param {n} is frozen")
+        return torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr, weight_decay=weight_decay)
+    
 
     else:
         raise ValueError(f'Optimizer {optimizer_name} not supported')
