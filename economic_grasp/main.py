@@ -45,7 +45,7 @@ def get_dataset(cfg, dataset_name, split, camera):
             test_dataset, 
             batch_size=cfg.tta.batch_size, 
             shuffle=False,
-            num_workers=cfg.num_workers,
+            num_workers=1,
             collate_fn=collate_fn
         )
     elif dataset_name == 'graspclutter6d':
@@ -64,7 +64,7 @@ def get_dataset(cfg, dataset_name, split, camera):
             test_dataset, 
             batch_size=cfg.tta.batch_size, 
             shuffle=False,
-            num_workers=cfg.num_workers, 
+            num_workers=1, 
             collate_fn=collate_fn
         )
     else:
@@ -110,6 +110,7 @@ def inference(cfg, graspnet, dataset_name, split, camera):
                 for k in ['loss/view_loss', 'loss/grasp_loss', 'loss/overall_loss', 'loss/tent_loss', 'loss/contrastive_loss']:
                     if k in end_points:
                         wandb.log({k: end_points[k].item()})
+
         end_points = None
         # Save results
         scene_list = test_dataset.scene_list()
@@ -249,7 +250,6 @@ def main(cfg, args):
     # Initialize wandb only if not in debug mode
     if args.wandb:
         init_wandb(cfg)
-        
     try:
         # Run test
         test(cfg)
@@ -292,7 +292,6 @@ def sweep_agent(sweep_cfg):
     cfg.tta.geval_net.uncertainty_thresh = wandb.config.uncertainty_thresh
     cfg.tta.geval_net.min_points = wandb.config.min_points
     cfg.tta.min_grasps = wandb.config.min_grasps
-    cfg.model.backbone_lr_ratio = wandb.config.backbone_lr_ratio
     cfg.model.uncertainty_n = wandb.config.uncertainty_n
     # Merge additional options if provided
     if args.opts:
@@ -312,6 +311,7 @@ def sweep_agent(sweep_cfg):
         if wandb.run is not None:
             wandb.finish()
 
+
 if __name__ == "__main__":
     """Main function."""
     parser = argparse.ArgumentParser()
@@ -327,39 +327,39 @@ if __name__ == "__main__":
     
     # Load configuration
     cfg = OmegaConf.load(args.cfg)
-    
     if 'dump_dir' not in cfg.keys() or cfg.dump_dir == '':
         cfg.dump_dir = args.cfg.replace('configs', 'logs').replace('.yaml', '')
     print('dump_dir: ', cfg.dump_dir)
     base_cfg = OmegaConf.load(cfg.base_cfg)
     cfg = OmegaConf.merge(base_cfg, cfg)
+    
     cfg.use_wandb = args.wandb
-
     # Convert opts to a list if it's not empty
     if args.opts:
         print(args.opts)  # This will now be a list directly
         cfg.merge_with_dotlist(args.opts)
 
-    # Define the sweep configuration
-    sweep_configuration = {
-        "method": "bayes",  # "bayes", "grid"
-        "metric": {"goal": "maximize", "name": "{}_AP_mean".format(cfg.eval_dataset.split)},
-        "parameters": {
-            "loss_type": {"values": ["graspness,view,objectness", "graspness,view", "view"]},
-            "ema_ratio": {"values": [0.999, 0.9995, 0.9999, 0.99995, 0.99999]},
-            "rst_ratio": {"values": [1.0, 0.1, 0.05, 0.01, 0.001]},
-            "grasp_q_thresh": {"values": [0/5]},
-            "uncertainty_thresh": {"values": [0.03, 0.05, 0.1]},
-            "min_points": {"values": [512]},
-            "min_grasps": {"values": [0]},
-            "lr": {"values": [0.001,0.0001]},
-            "backbone_lr_ratio": {"values": [0.1, 0.5, 1.0]},
-            "uncertainty_n": {"values": [5]}
-        }
-    }
+
     
     # Check if we're running a sweep or a regular run
     if args.sweep:
+        # Define the sweep configuration
+        sweep_configuration = {
+            "method": "bayes",  # "bayes", "grid"
+            "metric": {"goal": "maximize", "name": "{}_AP_mean".format(cfg.eval_dataset.split)},
+            "parameters": {
+                "loss_type": {"values": ["graspness,view,objectness", "graspness,view", "view"]},
+                "ema_ratio": {"values": [0.999, 0.9995, 0.9999, 0.99995, 0.99999]},
+                "rst_ratio": {"values": [1.0, 0.1, 0.05, 0.01, 0.001]},
+                "grasp_q_thresh": {"values": [0/5]},
+                "uncertainty_thresh": {"values": [0.03, 0.05, 0.1]},
+                "min_points": {"values": [512]},
+                "min_grasps": {"values": [0]},
+                "lr": {"values": [0.001,0.0001]},
+                "uncertainty_n": {"values": [5]}
+            }
+        }
+
         # Skip wandb in debug mode
             # Initialize the sweep
         sweep_id = wandb.sweep(sweep=sweep_configuration, project="Grasp-TTA")

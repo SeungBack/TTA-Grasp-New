@@ -21,11 +21,11 @@ tta:
   rst_ratio: 0.1  # Restore ratio
   aug_types: "none,hflip"  # Augmentation types for teacher ensemble
   use_student_aug: false
-  lr: 1e-4 # Learning rate for TTA
+  lr: 1e-5 # Learning rate for TTA
   optimizer: "adamw"
   geval_net:
     model: "dgcnn"
-    ckpt_path: "../grasp_qnet/ckpts/graspqnet-g1b-acr.tar"
+    ckpt_path: "../grasp_qnet/ckpts/grasp-qnet.tar"
     max_grasp_num: 512
     batch_size: 128
     min_points: 512

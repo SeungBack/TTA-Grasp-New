@@ -28,8 +28,12 @@ CUDA_VISIBLE_DEVICES=3 python test.py --checkpoint_path ckpts/economicgrasp_real
 
 CUDA_VISIBLE_DEVICES=0 python main.py --cfg configs/graspnet1b/tta-grasp/debug_lora_conv_r4.yaml
 CUDA_VISIBLE_DEVICES=1 python main.py --cfg configs/graspnet1b/tta-grasp/debug_lora_conv_r8.yaml
-CUDA_VISIBLE_DEVICES=2 python main.py --cfg configs/graspnet1b/tta-grasp/debug_lora_conv_r16.yaml
-CUDA_VISIBLE_DEVICES=3 python main.py --cfg configs/graspnet1b/tta-grasp/debug_lora_conv_r16_backbone.yaml
+CUDA_VISIBLE_DEVICES=3 python main.py --cfg configs/graspnet1b/bn-1/realsense_similar_mixed_mini.yaml
+
+
+CUDA_VISIBLE_DEVICES=2 python main.py --cfg configs/graspnet1b/tta-grasp/debug.yaml
+
+CUDA_VISIBLE_DEVICES=0 python main.py --cfg configs/graspnet1b/notta/realsense_similar_mini.yaml
 
 
 

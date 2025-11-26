@@ -36,7 +36,6 @@ def my_worker_init_fn(worker_id):
 # ------ Testing ------------
 def inference(cfgs):
     batch_interval = 20
-    stat_dict = {}  # collect statistics
     # set model to eval mode (for bn and dp)
     net.eval()
     tic = time.time()
@@ -104,8 +103,6 @@ def inference(cfgs):
 
 
 
-
-
 def evaluate(cfgs):
     if cfgs.dataset == 'g1b':
         ge = GraspNetEval(root=cfgs.dataset_root, camera=cfgs.camera, split=cfgs.split)
@@ -128,6 +125,7 @@ def evaluate(cfgs):
     # res, ap = ge.eval_all(cfgs.save_dir, proc=cfgs.num_workers)
     save_dir = os.path.join(cfgs.save_dir, 'ap_{}.npy'.format(cfgs.camera))
     np.save(save_dir, res)
+
 
 if __name__ == '__main__':
 

@@ -1,14 +1,10 @@
 base_cfg: "configs/base.yaml"
 
-tta_dataset:
+dataset:
   name: "graspnet1b"
   camera: "realsense"  # Camera split [realsense/kinect]
   split: "test_similar"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
 
-eval_dataset:
-  name: "graspnet1b"
-  camera: "realsense"  # Camera split [realsense/kinect]
-  split: "test_similar"  # Data split [test/test_seen/test_similar/test_novel/test_seen_mini]
 
 # Model settings
 model:

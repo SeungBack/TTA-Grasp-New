@@ -45,7 +45,7 @@ class GraspNetDataset(Dataset):
         elif 'mixed' in split or 'mini' in split:
             with open(os.path.join(root, 'splits', split+'.json'), 'r') as f:
                 self.scene_id_img_id_pairs = json.load(f)
-            # self.scene_id_img_id_pairs = self.scene_id_img_id_pairs[:256]
+            self.scene_id_img_id_pairs = self.scene_id_img_id_pairs[:256]
             self.sceneIds = [x[0] for x in np.unique(self.scene_id_img_id_pairs, axis=0)]
             
         else:
@@ -135,6 +135,7 @@ class GraspNetDataset(Dataset):
             return self.get_data(index)
 
     def get_data(self, index, return_raw_cloud=False):
+        
         color = np.array(Image.open(self.colorpath[index]), dtype=np.float32) / 255.0
         depth = np.array(Image.open(self.depthpath[index]))
         seg = np.array(Image.open(self.labelpath[index]))

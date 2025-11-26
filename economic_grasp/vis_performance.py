@@ -7,15 +7,14 @@ import matplotlib.pyplot as plt
 
 # --- Configuration ---
 split = 'test_similar_mixed_mini'
-# split = 'test_similar_mixed'
-split = 'test_similar'
+split = 'test_similar_mini'
 
 num_pairs_to_process = 256  # Set to None to process all pairs
 dump_folder = '/home/seung/Workspaces/grasp/TestAdaGrasp/economic_grasp/logs'
 root = '/home/seung/Datasets/GraspNet-1Billion'
 # Methods to compare (exactly two)
 methods = ['graspnet1b/notta/realsense_similar', 'graspnet1b/tta-grasp/no_lora_no_mixed']
-methods = ['graspnet1b/tta-grasp/no_lora_no_mixed_noupdate', 'graspnet1b/tta-grasp/no_lora_no_mixed']
+methods = ['graspnet1b/notta/realsense_similar_mini', 'graspnet1b/tta-grasp/no_mixed']
 
 method_names = ['notta', 'tta-grasp']  # Simplified names for display
 sigma = 3  # Sigma for smoothing

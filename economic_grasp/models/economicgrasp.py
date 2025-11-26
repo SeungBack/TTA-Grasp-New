@@ -14,7 +14,6 @@ from label_generation import process_grasp_labels, process_grasp_pseudo_label, b
 from libs.pointnet2.pointnet2_utils import furthest_point_sample, gather_operation
 from arguments import cfgs
 
-from .adapter import ResidualFeat
 
 def load_economicgrasp(cfg, device):
     """Load and initialize model."""
@@ -90,9 +89,6 @@ class EconomicGrasp(nn.Module):
         # Minkowski Backbone
         seed_features = self.backbone(mink_input).F
         seed_features = seed_features[end_points['quantize2original']].view(B, point_num, -1).transpose(1, 2)
-
-        # [B (batch size), 512 (feature dim), 20000 (points in a scene)]
-            # seed_features = self.lora_backbone(seed_features)
 
 
         # Generate the masks of the objectness and the graspness
