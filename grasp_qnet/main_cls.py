@@ -21,8 +21,10 @@ from data_utils import AdamW
 from torch.optim import Adam, SGD
 import sklearn
 
+from models.pointnet_v2 import *
 from models.dgcnn import *
-
+from models.edgegrasp import *
+from models.pointmlp import *
 
 # from cbloss.loss import FocalLoss, ClassBalancedLoss
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -34,7 +36,7 @@ def init_stats(split):
         f'{split}_loss': 0,
         f'{split}_mae_acc': 0,
     }
-    for th in [0.3, 0.5, 0.7]:
+    for th in [0.5]:
         stat[f'{split}_acc_{th}'] = 0
         stat[f'{split}_bal_acc_{th}'] = 0
         stat[f'{split}_acc_1_{th}'] = 0
@@ -60,20 +62,20 @@ def train(cfgs):
     log_fout = open(os.path.join(log_dir, 'log_train.txt'), 'a')
     log_fout.write(str(cfgs) + '\n')
 
-    train_dataset = GraspEvalDataset(cfgs.g1b_root, cfgs.acronym_root, split='train', return_score=True)
+    train_dataset = GraspEvalDataset(cfgs.g1b_root, cfgs.acronym_root, split='train', use_normal=cfgs.use_normal, return_score=False)
     # train_dataloader = create_balanced_grasp_quality_dataloader(train_dataset, threshold=CLS_THRESH, batch_size=cfgs.batch_size, num_workers=cfgs.num_workers)
     train_dataloader = DataLoader(train_dataset, cfgs.batch_size, shuffle=True, num_workers=cfgs.num_workers)
     print('train dataset size:', len(train_dataset))
 
-    test_seen_dataset = GraspEvalDataset(cfgs.g1b_root, cfgs.acronym_root, split='test_seen', return_score=True)
-    test_seen_dataloader = DataLoader(test_seen_dataset, batch_size=cfgs.batch_size, shuffle=True, num_workers=1)
+    test_seen_dataset = GraspEvalDataset(cfgs.g1b_root, cfgs.acronym_root, split='test_seen', use_normal=cfgs.use_normal, return_score=False)
+    test_seen_dataloader = DataLoader(test_seen_dataset, batch_size=cfgs.batch_size, shuffle=False, num_workers=1)
     
-    test_similar_dataset = GraspEvalDataset(cfgs.g1b_root, cfgs.acronym_root, split='test_similar', return_score=True)
-    test_similar_dataloader = DataLoader(test_similar_dataset, batch_size=cfgs.batch_size, shuffle=True, num_workers=1)
-
-    test_novel_dataset = GraspEvalDataset(cfgs.g1b_root, cfgs.acronym_root, split='test_novel', return_score=True)
-    test_novel_dataloader = DataLoader(test_novel_dataset, batch_size=cfgs.batch_size, shuffle=True, num_workers=1)
-
+    test_similar_dataset = GraspEvalDataset(cfgs.g1b_root, cfgs.acronym_root, split='test_similar', use_normal=cfgs.use_normal, return_score=False)
+    test_similar_dataloader = DataLoader(test_similar_dataset, batch_size=cfgs.batch_size, shuffle=False, num_workers=1)
+    
+    test_novel_dataset = GraspEvalDataset(cfgs.g1b_root, cfgs.acronym_root, split='test_novel', use_normal=cfgs.use_normal, return_score=False)
+    test_novel_dataloader = DataLoader(test_novel_dataset, batch_size=cfgs.batch_size, shuffle=False, num_workers=1)
+    
     # Store test dataloaders in a list for easier iteration
     test_dataloaders = [test_seen_dataloader, test_similar_dataloader, test_novel_dataloader]
     test_splits = ['test_seen', 'test_similar', 'test_novel']
@@ -99,7 +101,6 @@ def train(cfgs):
 
     net.train()
     optimizer = AdamW(net.parameters(), lr=cfgs.learning_rate, weight_decay=cfgs.weight_decay)
-    # optimizer = SGD(net.parameters(), lr=cfgs.learning_rate, momentum=0.9, weight_decay=cfgs.weight_decay)
     
     # Setup for per-iteration warmup + step LR schedule
     warmup_iters = cfgs.warmup_iters  # Direct control over iterations, not epochs
@@ -252,7 +253,7 @@ def train(cfgs):
         net.train()
         train_stats = init_stats('train')
         batch_count = 0
-        criterion = nn.MSELoss()  # Use MSELoss for regression
+        criterion = nn.BCELoss()  # Use BCELoss for binary classification
 
         
         for batch_idx, (obj_cloud, gripper_cloud, gt_score) in enumerate(tqdm(train_dataloader)):
@@ -270,25 +271,19 @@ def train(cfgs):
             train_stats['train_loss'] += loss.item()
 
             loss.backward()
-            nn.utils.clip_grad_norm_(net.parameters(), cfgs.gradient_clip)
             optimizer.step()
             
-            for th in [0.3, 0.5, 0.7]:
-                pred_label = (pred >= (th - 1e-4)).long().cpu().numpy()
-                gt_label = (gt_score >= (th - 1e-4)).long().cpu().numpy()
-                acc = sklearn.metrics.accuracy_score(gt_label, pred_label)
-                bal_acc = sklearn.metrics.balanced_accuracy_score(gt_label, pred_label)
-                cls_1_acc = sklearn.metrics.precision_score(gt_label, pred_label, pos_label=1, zero_division=0.0)
-                cls_0_acc = sklearn.metrics.precision_score(gt_label, pred_label, pos_label=0, zero_division=0.0)
-                train_stats[f'train_acc_{th}'] += acc
-                train_stats[f'train_bal_acc_{th}'] += bal_acc
-                train_stats[f'train_acc_1_{th}'] += cls_1_acc
-                train_stats[f'train_acc_0_{th}'] += cls_0_acc
-           
-            # compute MAE accuracy
-            mae_acc = np.mean(np.abs(pred.detach().cpu().numpy() - gt_score.cpu().numpy()))
-            train_stats['train_mae_acc'] += mae_acc
-            
+            pred_label = (pred >= 0.5).long().cpu().numpy()
+            gt_label = (gt_score >= 0.5).long().cpu().numpy()
+            acc = sklearn.metrics.accuracy_score(gt_label, pred_label)
+            bal_acc = sklearn.metrics.balanced_accuracy_score(gt_label, pred_label)
+            cls_1_acc = sklearn.metrics.precision_score(gt_label, pred_label, pos_label=1, zero_division=0.0)
+            cls_0_acc = sklearn.metrics.precision_score(gt_label, pred_label, pos_label=0, zero_division=0.0)
+            train_stats['train_acc_0.5'] += acc
+            train_stats['train_bal_acc_0.5'] += bal_acc
+            train_stats['train_acc_1_0.5'] += cls_1_acc
+            train_stats['train_acc_0_0.5'] += cls_0_acc
+
             batch_count += 1
             
             # Log training stats periodically
@@ -320,7 +315,7 @@ def train(cfgs):
                 net.train()
             
             # Update learning rate scheduler after every batch
-            scheduler.step()
+            # scheduler.step()
             
             # Log learning rate periodically
             if (global_iter + 1) % 100 == 0:
@@ -361,22 +356,18 @@ def evaluate(cfgs, net, dataloader, writer, split, iter_num):
             gt_score = gt_score.to('cuda').float()
             gt_score = torch.round(gt_score, decimals=2)  # Round to 2 decimal places
 
-            for th in [0.3, 0.5, 0.7]:
-                pred_label = (pred >= (th - 1e-4)).long().cpu().numpy()
-                gt_label = (gt_score >= (th - 1e-4)).long().cpu().numpy()
-                acc = sklearn.metrics.accuracy_score(gt_label, pred_label)
-                bal_acc = sklearn.metrics.balanced_accuracy_score(gt_label, pred_label)
-                cls_1_acc = sklearn.metrics.precision_score(gt_label, pred_label, pos_label=1, zero_division=0.0)
-                cls_0_acc = sklearn.metrics.precision_score(gt_label, pred_label, pos_label=0, zero_division=0.0)
-                
-                stat_dict[f'{split}_acc_{th}'] += acc
-                stat_dict[f'{split}_bal_acc_{th}'] += bal_acc
-                stat_dict[f'{split}_acc_1_{th}'] += cls_1_acc
-                stat_dict[f'{split}_acc_0_{th}'] += cls_0_acc
-
-            # compute MAE accuracy
-            mae_acc = np.mean(np.abs(pred.detach().cpu().numpy() - gt_score.cpu().numpy()))
-            stat_dict[f'{split}_mae_acc'] += mae_acc    
+            pred_label = (pred >= 0.5).long().cpu().numpy()
+            gt_label = (gt_score >= 0.5).long().cpu().numpy()
+            acc = sklearn.metrics.accuracy_score(gt_label, pred_label)
+            bal_acc = sklearn.metrics.balanced_accuracy_score(gt_label, pred_label)
+            cls_1_acc = sklearn.metrics.precision_score(gt_label, pred_label, pos_label=1, zero_division=0.0)
+            cls_0_acc = sklearn.metrics.precision_score(gt_label, pred_label, pos_label=0, zero_division=0.0)
+            loss = F.binary_cross_entropy(pred, gt_score)   
+            stat_dict[f'{split}_loss'] += loss.item()
+            stat_dict[f'{split}_acc_0.5'] += acc
+            stat_dict[f'{split}_bal_acc_0.5'] += bal_acc
+            stat_dict[f'{split}_acc_1_0.5'] += cls_1_acc
+            stat_dict[f'{split}_acc_0_0.5'] += cls_0_acc
 
             n_batches += 1
     
@@ -413,16 +404,16 @@ def save_checkpoint(net, optimizer, epoch, iter_num, loss, best_accuracy, schedu
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--g1b_root', type=str, help='G1B dataset root directory', 
-                        default='/data/Grasp/GraspNet-1Billion/grasp_qnet_final')
+                        default='/data/Grasp/GraspNet-1Billion/grasp_qnet_new')
     parser.add_argument('--acronym_root', type=str,
                         default= '/data/Grasp/ACRONYM/grasp_qnet',
                         help='ACRONYM dataset root directory')
     parser.add_argument('--net', type=str, default='pointnet2', help='Model to use, [one of pointnet2, dgcnn, pointmlp]')
     parser.add_argument('--ckpt_path', default=None, help='Model checkpoint path [default: None]')
     parser.add_argument('--log_dir', default='log', help='Dump dir to save model checkpoint [default: log]')
-    parser.add_argument('--max_epoch', type=int, default=20, help='Epoch to run [default: 18]')
+    parser.add_argument('--max_epoch', type=int, default=200, help='Epoch to run [default: 18]')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default:24]')
-    parser.add_argument('--num_workers', type=int, default=12, help='workers num during training [default: 2]')
+    parser.add_argument('--num_workers', type=int, default=8, help='workers num during training [default: 2]')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial learning rate [default: 0.001]')
     parser.add_argument('--min_learning_rate', type=float, default=1e-5, help='Minimum learning rate [default: 1e-5]')
     parser.add_argument('--weight_decay', type=float, default=1e-3, help='Optimization L2 weight decay [default: 0]')
@@ -433,11 +424,11 @@ if __name__ == '__main__':
                         help='Number of evaluations to perform per epoch [default: 4]')
     parser.add_argument('--save_best_only', action='store_true', 
                         help='Only save checkpoints when model improves (except epoch end)')
-    parser.add_argument('--warmup_iters', type=int, default=20000, 
+    parser.add_argument('--warmup_iters', type=int, default=0, 
                         help='Number of iterations for learning rate warmup [default: 5000]')
-    parser.add_argument('--warmup_factor', type=float, default=1.0, 
+    parser.add_argument('--warmup_factor', type=float, default=0.1, 
                         help='Factor to multiply learning rate by at the start of warmup [default: 0.1]')
-    parser.add_argument('--step_size_iters', type=int, default=1000, 
+    parser.add_argument('--step_size_iters', type=int, default=10000, 
                         help='Step LR period in iterations [default: 1000]')
     parser.add_argument('--step_gamma', type=float, default=0.7, 
                         help='Step LR decay factor [default: 0.7]')
